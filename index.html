@@ -465,6 +465,17 @@
 
             draw() {
                 if (this.isEliminated) return;
+
+                // --- Draw Player Name ---
+                const nameYOffset = this.isCharging ? 40 : 25; // 当蓄力条可见时，将名字向上移动
+                ctx.font = 'bold 16px "ZCOOL KuaiLe"';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = this.color;
+                ctx.shadowColor = 'black';
+                ctx.shadowBlur = 5;
+                ctx.fillText(this.name, this.pos.x, this.pos.y - this.radius - nameYOffset);
+                ctx.shadowBlur = 0; // 为其他元素重置
+
                 ctx.save();
                 if (this.activePowerUp === 'phase') { ctx.globalAlpha = 0.5; }
                 if (this.isCharging && this.jumpCharge > 0 && this.activePowerUp !== 'box') {
@@ -1960,48 +1971,61 @@
         });
 
         window.onload = () => {
-            // 为菜单和说明页预加载少量关键资源
-            const menuAssets = {
-                background1: assetsToLoad.background1,
-            };
-            // 把所有道具图片也加入预加载
-            powerUpInfo.forEach(p => {
-                if (assetsToLoad[p.assetName]) {
-                    menuAssets[p.assetName] = assetsToLoad[p.assetName];
-                }
-            });
+            // 立即设置为加载状态，禁用所有按钮
+            setStartScreenInteractive(false);
             
-            loadAssets(menuAssets).then(() => {
-                // 背景图加载后，主循环会在canvas上绘制它
-                // 现在可以安全地设置演示画布了
-            });
+            // 加载所有资源
+            loadAssets(assetsToLoad).then(() => {
+                // 资源加载完毕，恢复交互
+                setStartScreenInteractive(true);
 
+                // 监听用户的首次交互来解锁并播放音频
+                document.body.addEventListener('click', unlockAudioAndPlayStartBGM);
+                document.body.addEventListener('keydown', unlockAudioAndPlayStartBGM);
 
-            // 监听用户的首次交互来解锁并播放音频
-            document.body.addEventListener('click', unlockAudioAndPlayStartBGM);
-            document.body.addEventListener('keydown', unlockAudioAndPlayStartBGM);
+                updateControlsInfo(playerCount);
 
-            updateControlsInfo(playerCount);
-
-            Object.entries(playerCountButtons).forEach(([count, button]) => {
-                button.addEventListener('click', () => {
-                    playSound('buttonClick');
-                    playerCount = parseInt(count, 10);
-                    
-                    Object.values(playerCountButtons).forEach(btn => {
-                        btn.classList.remove('bg-purple-600');
-                        btn.classList.add('bg-gray-600', 'hover:bg-gray-700');
+                Object.entries(playerCountButtons).forEach(([count, button]) => {
+                    button.addEventListener('click', () => {
+                        playSound('buttonClick');
+                        playerCount = parseInt(count, 10);
+                        
+                        Object.values(playerCountButtons).forEach(btn => {
+                            btn.classList.remove('bg-purple-600');
+                            btn.classList.add('bg-gray-600', 'hover:bg-gray-700');
+                        });
+                        button.classList.add('bg-purple-600');
+                        button.classList.remove('bg-gray-600', 'hover:bg-gray-700');
+                        
+                        updateControlsInfo(playerCount);
                     });
-                    button.classList.add('bg-purple-600');
-                    button.classList.remove('bg-gray-600', 'hover:bg-gray-700');
-                    
-                    updateControlsInfo(playerCount);
                 });
             });
-            
+
             // 启动游戏循环
             requestAnimationFrame(gameLoop);
         };
+
+        function setStartScreenInteractive(isInteractive) {
+            const buttons = [startButton, instructionsButton, creditsButton, ...Object.values(playerCountButtons)];
+            
+            buttons.forEach(btn => {
+                btn.disabled = !isInteractive;
+                if (isInteractive) {
+                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                } else {
+                    btn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+            });
+
+            if (isInteractive) {
+                loadingText.classList.add('hidden');
+                instructionsText.classList.remove('hidden');
+            } else {
+                loadingText.classList.remove('hidden');
+                instructionsText.classList.add('hidden');
+            }
+        }
 
         const allControlsData = [
             { id: 1, name: '莱德', color: '#FF6347', keys: ['A', 'W', 'D'], note: '左 / 跳 / 右' },
