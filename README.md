@@ -1,4 +1,4 @@
-<h1 style="color:red;">点击右上角空白处有Debug菜单！点击右上角空白处有Debug菜单！</h1>
+<h1 style="color:red;">点击右上角空白处有Debug菜单！AI智力很低，建议和朋友一起玩</h1>
 
 # 猫的万有引力 (Cat's Universal Gravity)
 
