@@ -1,0 +1,2271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>猫的万有引力 (Cat's Universal Gravity)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
+        body {
+            font-family: 'ZCOOL KuaiLe', cursive, sans-serif;
+            touch-action: none;
+            overflow: hidden;
+            background-color: #0c0a18;
+            color: #ffffff;
+        }
+        canvas {
+            /* 注意: 原始代码使用相对路径作为背景图片，
+               在某些环境中可能无法正确加载。
+               使用占位符或完整的URL会更可靠。
+               暂时保留，但添加背景色作为后备。
+            */
+            background-color: #0c0a18;
+            /* background-image: url('./images/background.png'); */ /* We will draw this via JS now */
+            background-size: cover;
+            background-position: center;
+            /* cursor: none; */
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .control-card {
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+        }
+        .key {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 0.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            font-size: 1.25rem;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .player-name-input::placeholder {
+            color: var(--player-color);
+            opacity: 1; /* Override browser default lighter color */
+        }
+        .player-name-editable:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3); /* Subtle glow to indicate focus */
+            border-radius: 4px;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        .debug-btn {
+            display: block;
+            width: 100%;
+            padding: 4px 8px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 4px;
+            text-align: left;
+            margin-top: 4px;
+        }
+        .debug-btn:hover {
+            background-color: rgba(255, 255, 255, 0.4);
+        }
+    </style>
+</head>
+<body class="w-screen h-screen flex flex-col items-center justify-center m-0 p-0">
+
+    <div id="game-container" class="w-full h-full relative">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="hud" class="hidden absolute top-0 left-0 right-0 p-4 flex justify-between items-start z-5">
+            <div id="score-display" class="flex flex-col gap-2"></div>
+            <div class="flex flex-col items-center">
+                <p id="game-timer-display" class="text-4xl font-bold text-white" style="text-shadow: 2px 2px 4px rgba(0,0,0,0.5);"></p>
+                <div id="elimination-feed" class="mt-2 text-3xl space-y-1 text-center"></div>
+            </div>
+            <div style="width: 200px;"></div><!-- Spacer to keep timer centered -->
+        </div>
+        
+        <div id="start-screen" class="absolute inset-0 bg-black bg-opacity-40 flex flex-col items-center justify-center text-center p-4 z-10">
+            <h1 class="text-6xl md:text-8xl font-bold text-white drop-shadow-lg mb-2">猫的万有引力</h1>
+            <h2 class="text-2xl md:text-3xl text-yellow-300 mb-8">在失重的宇宙里，只有猫咪和引力说了算！</h2>
+            <div class="mb-6">
+                <label class="text-2xl text-white mr-4">选择人类玩家数量:</label>
+                <button id="player-count-1" class="player-count-btn bg-purple-600 text-white font-bold py-2 px-6 rounded-full text-xl shadow-lg transition">1</button>
+                <button id="player-count-2" class="player-count-btn bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded-full text-xl shadow-lg transition">2</button>
+                <button id="player-count-3" class="player-count-btn bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded-full text-xl shadow-lg transition">3</button>
+                <button id="player-count-4" class="player-count-btn bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded-full text-xl shadow-lg transition">4</button>
+            </div>
+            <div id="controls-info" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            </div>
+            <button id="start-button" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 px-8 rounded-full text-3xl shadow-lg transition transform hover:scale-105">
+                开始混战！
+            </button>
+            <p id="loading-text" class="hidden mt-4 text-xl text-white">正在加载资源...</p>
+            <p id="instructions-text" class="mt-8 text-sm text-gray-400">拾取道具，躲避陨石，成为最后的猫咪！</p>
+            <div class="mt-4 flex flex-col gap-4">
+                <button id="instructions-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-full text-xl shadow-lg transition">
+                    游戏说明
+                </button>
+                <button id="credits-button" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-full text-xl shadow-lg transition">
+                    制作组
+                </button>
+            </div>
+        </div>
+
+        <div id="instructions-modal" class="hidden absolute inset-0 bg-black bg-opacity-80 flex-col items-center justify-center p-4 z-20">
+            <div class="control-card w-full max-w-4xl max-h-[90vh] rounded-2xl p-6 relative overflow-y-auto">
+                <button id="close-instructions-button" class="absolute top-4 right-4 text-white text-3xl font-bold hover:text-yellow-300 transition-colors">&times;</button>
+                <h2 class="text-4xl text-center text-yellow-300 mb-6">游戏说明</h2>
+                
+                <div class="space-y-6">
+                    <!-- Top Section: Instructions -->
+                    <div class="p-4 rounded-lg bg-black bg-opacity-20">
+                        <h3 class="text-2xl text-white mb-2 text-center">基本操作</h3>
+                        <p class="text-center text-gray-300 text-lg">
+                            按住<span class="key mx-1">跳跃键</span>蓄力，松开跳跃。<br>
+                            在星球上按<span class="key mx-1">左/右键</span>移动。
+                        </p>
+                         <div class="mt-4 text-center text-yellow-200 border-t border-gray-600 pt-4">
+                             <h4 class="text-xl font-bold mb-2">生存法则</h4>
+                             <ul class="text-gray-300 list-none space-y-1 text-base">
+                                 <li>- 躲避随机飞来的<span class="text-red-400 font-semibold">陨石</span>！</li>
+                                 <li>- 小心移动的星球，不要被<span class="text-red-400 font-semibold">挤压</span>！</li>
+                                 <li>- 警惕<span class="text-red-400 font-semibold">流星雨</span>预警，它们又快又密集！</li>
+                                 <li>- 成为最后的猫咪！</li>
+                             </ul>
+                         </div>
+                    </div>
+
+                    <!-- Bottom Section: Power-ups -->
+                    <div class="p-4 rounded-lg bg-black bg-opacity-20">
+                        <div id="power-ups-container" class="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
+                            <div>
+                                <h3 class="text-2xl text-white mb-3 text-center">进攻道具</h3>
+                                <div id="attack-power-ups-list" class="space-y-3"></div>
+                            </div>
+                             <div>
+                                <h3 class="text-2xl text-white mb-3 text-center">功能道具</h3>
+                                <div id="functional-power-ups-list" class="space-y-3"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="credits-modal" class="hidden absolute inset-0 bg-black bg-opacity-80 flex-col items-center justify-center p-4 z-20">
+            <div class="control-card w-full max-w-2xl max-h-[90vh] rounded-2xl p-6 relative overflow-y-auto">
+                <button id="close-credits-button" class="absolute top-4 right-4 text-white text-3xl font-bold hover:text-yellow-300 transition-colors">&times;</button>
+                <h2 class="text-4xl text-center text-yellow-300 mb-6">制作组</h2>
+                <div class="space-y-4 text-white text-lg">
+                    <div class="flex items-center gap-4">
+                        <img src="./images/cat1.png" class="w-10 h-10 flex-shrink-0">
+                        <p><span class="font-bold text-yellow-200">策划：</span>Gemini2.5 Pro, GPT-4o</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <img src="./images/cat2.png" class="w-10 h-10 flex-shrink-0">
+                        <p><span class="font-bold text-yellow-200">程序：</span>Gemini 2.5Pro</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <img src="./images/cat3.png" class="w-10 h-10 flex-shrink-0">
+                        <p><span class="font-bold text-yellow-200">美术：</span>Tempietto， GPT-4o</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <img src="./images/cat4.png" class="w-10 h-10 flex-shrink-0">
+                        <p><span class="font-bold text-yellow-200">音效：</span>舔学教授，SunoAI</p>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <div id="game-over-screen" class="hidden absolute inset-0 bg-black bg-opacity-70 flex-col items-center justify-center text-center p-4 z-10">
+            <h2 id="round-counter-text" class="text-4xl text-white mb-2"></h2>
+            <h1 id="winner-phrase-text" class="text-6xl md:text-8xl font-bold text-yellow-400 drop-shadow-lg mb-4"></h1>
+            <div class="flex flex-row gap-8 justify-center w-full max-w-2xl mb-6">
+                <div id="round-rankings-container" class="flex-1">
+                    <h3 class="text-3xl text-white mb-3">本局排名</h3>
+                    <div id="final-rankings" class="text-white text-2xl space-y-2"></div>
+                </div>
+                <div id="total-score-container" class="flex-1">
+                    <h3 class="text-3xl text-white mb-3">总分榜</h3>
+                    <div id="total-score-rankings" class="text-white text-2xl space-y-2"></div>
+                </div>
+            </div>
+            <p id="total-time-text" class="text-2xl text-white mb-8"></p>
+            <div class="flex gap-4">
+                <button id="restart-button" class="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-8 rounded-full text-3xl shadow-lg transition transform hover:scale-105">
+                    再来一局!
+                </button>
+                <button id="reset-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-8 rounded-full text-3xl shadow-lg transition transform hover:scale-105">
+                    重新开始
+                </button>
+            </div>
+        </div>
+        <div class="absolute bottom-4 right-4 text-white text-lg opacity-50 z-50 pointer-events-none">
+            Created by RenderDog_Studio
+        </div>
+
+        <div id="debug-container" class="absolute top-0 right-0 p-2 z-50">
+            <button id="debug-toggle-btn" class="w-5 h-5 opacity-0"></button>
+            <div id="debug-menu" class="hidden absolute top-8 right-2 bg-gray-800 bg-opacity-80 p-4 rounded-lg text-white space-y-2 w-48">
+                <h4 class="text-lg font-bold text-center">Debug</h4>
+                <button id="debug-kill-ai" class="debug-btn">击杀所有AI</button>
+                <button id="debug-kill-players" class="debug-btn">击杀所有人类</button>
+                <button id="debug-meteor-shower" class="debug-btn">强制流星雨</button>
+                <div id="debug-spawn-powerups">
+                     <h5 class="text-md font-bold mt-2 border-t border-gray-600 pt-2">生成道具</h5>
+                     <!-- Power-up buttons will be generated here by JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- BGM: 请在此处填入你的本地音频文件路径 -->
+    <audio id="bgm-start" src="./Sounds/BGM.wav" loop></audio>
+    <audio id="bgm-game" src="./Sounds/Cosmic Cat Bounce.mp3" loop></audio>
+
+    <script>
+        // --- 游戏元素 ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const startButton = document.getElementById('start-button');
+        const restartButton = document.getElementById('restart-button');
+        const resetButton = document.getElementById('reset-button');
+        const winnerPhraseText = document.getElementById('winner-phrase-text');
+        const finalRankings = document.getElementById('final-rankings');
+        const roundCounterText = document.getElementById('round-counter-text');
+        const totalScoreRankings = document.getElementById('total-score-rankings');
+        const controlsInfo = document.getElementById('controls-info');
+        const loadingText = document.getElementById('loading-text');
+        const instructionsText = document.getElementById('instructions-text');
+        const hud = document.getElementById('hud');
+        const gameTimerDisplay = document.getElementById('game-timer-display');
+        const totalTimeText = document.getElementById('total-time-text');
+        const eliminationFeed = document.getElementById('elimination-feed');
+        const playerCountButtons = {
+            1: document.getElementById('player-count-1'),
+            2: document.getElementById('player-count-2'),
+            3: document.getElementById('player-count-3'),
+            4: document.getElementById('player-count-4'),
+        };
+        const bgmStart = document.getElementById('bgm-start');
+        const bgmGame = document.getElementById('bgm-game');
+        const instructionsButton = document.getElementById('instructions-button');
+        const instructionsModal = document.getElementById('instructions-modal');
+        const closeInstructionsButton = document.getElementById('close-instructions-button');
+        const instructionsCanvas = document.getElementById('instructions-canvas');
+        const powerUpsList = document.getElementById('power-ups-list');
+        const creditsButton = document.getElementById('credits-button');
+        const creditsModal = document.getElementById('credits-modal');
+        const closeCreditsButton = document.getElementById('close-credits-button');
+
+        // --- Debug Elements ---
+        const debugToggleBtn = document.getElementById('debug-toggle-btn');
+        const debugMenu = document.getElementById('debug-menu');
+        const debugKillAiBtn = document.getElementById('debug-kill-ai');
+        const debugKillPlayersBtn = document.getElementById('debug-kill-players');
+        const debugMeteorShowerBtn = document.getElementById('debug-meteor-shower');
+        const debugSpawnPowerupsContainer = document.getElementById('debug-spawn-powerups');
+
+        // --- 游戏状态 ---
+        let players = [], planets = [], particles = [], meteors = [], powerUps = [], blackHoles = [], shields = [], explosionIndicators = [], playerStartIndicators = [], pendingBlackHoles = [];
+        let gameState = 'start';
+        let playerCount = 1;
+        let keys = {};
+        let assets = {};
+        let sfx = {};
+        let playerScores = { 1: 0, 2: 0, 3: 0, 4: 0 };
+        let roundNumber = 1;
+        let gameTimer = 0;
+        let eliminationMessages = [];
+        let audioUnlocked = false;
+        let screenShakeTimer = 0;
+        let screenShakeMagnitude = 0;
+        let instructionsAnimationId = null;
+        
+        const allPlayersData = [
+            { id: 1, name: '莱德', color: '#FF6347', controls: { left: 'KeyA', jump: 'KeyW', right: 'KeyD' }, assetName: 'cat1' },
+            { id: 2, name: '布鲁', color: '#4169E1', controls: { left: 'KeyJ', jump: 'KeyI', right: 'KeyL' }, assetName: 'cat2' },
+            { id: 3, name: '格林', color: '#32CD32', controls: { left: 'ArrowLeft', jump: 'ArrowUp', right: 'ArrowRight' }, assetName: 'cat3' },
+            { id: 4, name: '胖橘', color: '#FFD700', controls: { left: 'Numpad4', jump: 'Numpad8', right: 'Numpad6' }, assetName: 'cat4' },
+        ];
+        
+        // --- 用于固定帧率循环的变量 ---
+        let lastTime = 0; 
+        let accumulator = 0;
+        const timeStep = 1 / 60; // 锁定 60 FPS
+
+        // --- 游戏计时器与冷却 ---
+        let isMeteorShowerImminent = false;
+        let meteorShowerWarningTime = 0;
+        let attackPowerUpSpawnTimer = 3;
+        let functionPowerUpSpawnTimer = 10;
+        const meteorShowerSchedule = [20, 35, 50, 60];
+        const meteorShowerCounts = [8, 12, 16, 20];
+        let nextShowerIndex = 0;
+        let post60sShowerTimer = 0;
+
+        // --- 资源管理 ---
+        const sfxToLoad = {
+            buttonClick: './sounds/click_clipped.wav',      // 按钮音
+            getPowerUp: './Sounds/get_item_clipped.wav',       // 获得道具的声音
+            playerEliminated: './Sounds/dead_clipped.wav', // 被淘汰的声音
+            playerJump: './Sounds/jump_clipped.wav',          // 猫咪跳跃的声音
+            playerLand: './sounds/Landed_clipped.wav',       // 猫咪落到星球上的声音
+            mineExplosion: './sounds/bomb_clipped.wav',    // 猫雷爆炸的声音
+            impactHit: './sounds/impact_clipped.wav',        // 冲刺道具状态撞击其他猫咪的声音
+            gameOverVictory: './Sounds/结算_clipped.wav'      // 结算胜利的声音
+        };
+        const assetsToLoad = {
+            background1: './images/backgroundw.png',
+            background2: './images/backgroundd.png', // 请将此文件替换为您在60秒时要过渡到的背景图片
+            cat1: './images/cat1.png',
+            cat2: './images/cat2.png',
+            cat3: './images/cat3.png',
+            cat4: './images/cat4.png',
+            planet1: './images/ball1.png',
+            planet2: './images/ball2.png',
+            planet3: './images/ball3.png',
+            planet4: './images/ball4.png', // 这个会故意加载失败以显示错误处理
+            planet5: './images/ball5.png',
+            planet6: './images/ball6.png',
+            planet7: './images/ball7.png',
+            planet8: './images/ball8.png',
+            meteor1: './images/firestonenew.png',
+            meteor2: './images/firestonenew2.png',
+            star: './images/star.png',
+            powerUpMine: './images/bomb.png',
+            powerUpBlackhole: './images/darkhole.png',
+            powerUpImpact: './images/catnip.png',
+            powerUpBox: './images/invisibility.png',
+            powerUpPhase: './images/invisible.png',
+            powerUpShield: './images/shield.png',
+            powerUpGravityBomb: './images/inverse_gravity.png',
+            blackhole: './images/darkhole2.png',
+        };
+
+        const powerUpInfo = [
+            { name: '猫猫炸弹', type: 'mine', assetName: 'powerUpMine', description: '放置一颗会在5秒后或敌人靠近时爆炸的炸弹，炸飞周围玩家。', category: 'attack' },
+            { name: '猫薄荷', type: 'impact', assetName: 'powerUpImpact', description: '获得一次性的强力冲刺跳跃，能将撞到的其他猫咪弹飞。', category: 'attack' },
+            { name: '重力反转', type: 'gravityBomb', assetName: 'powerUpGravityBomb', description: '【在星球上拾取】立刻反转所在星球的引力5秒，使其变为斥力。', category: 'functional' },
+            { name: '蹲箱子', type: 'box', assetName: 'powerUpBox', description: '变成一个箱子，持续5秒。期间免疫所有伤害和效果，但无法移动。再次按跳跃键可提前取消。', category: 'functional' },
+            { name: '隐匿', type: 'phase', assetName: 'powerUpPhase', description: '进入相位状态4秒，可以穿过其他玩家和陨石，但无法降落在星球上。', category: 'functional' },
+            { name: '护盾', type: 'shield', assetName: 'powerUpShield', description: '【在星球上拾取】为所在星球生成一个可以抵挡5次陨石撞击的护盾。', category: 'functional' },
+            { name: '黑洞', type: 'blackhole', assetName: 'powerUpBlackhole', description: '【在星球上拾取】3秒后在当前位置生成一个致命的黑洞，持续8秒。', category: 'functional' }
+        ];
+
+        function loadAssets(assetMap = assetsToLoad) {
+            const imagePromises = Object.entries(assetMap).map(([name, src]) => {
+                // 如果资源已存在，则跳过
+                if (assets[name]) {
+                    return Promise.resolve();
+                }
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.src = src;
+                    img.onload = () => { assets[name] = img; resolve(); };
+                    img.onerror = () => { 
+                        console.warn(`资源加载失败: ${name}. 将使用默认图形。`); 
+                        assets[name] = null; // 标记为加载失败
+                        resolve(); 
+                    };
+                });
+            });
+
+            const soundPromises = Object.entries(sfxToLoad).map(([name, src]) => {
+                return new Promise((resolve) => {
+                    const audio = new Audio();
+                    audio.src = src;
+                    audio.addEventListener('loadeddata', () => {
+                        sfx[name] = audio;
+                        resolve();
+                    });
+                    audio.onerror = () => {
+                        if (src !== './sounds/empty.wav') {
+                           console.warn(`音效加载失败: ${name} at ${src}.`);
+                        }
+                        sfx[name] = null;
+                        resolve();
+                    };
+                });
+            });
+
+            return Promise.all([...imagePromises, ...soundPromises]);
+        }
+        
+        // --- 工具类和函数 ---
+        class Vec2 {
+            constructor(x, y) { this.x = x; this.y = y; }
+            add(v) { return new Vec2(this.x + v.x, this.y + v.y); }
+            sub(v) { return new Vec2(this.x - v.x, this.y - v.y); }
+            scale(s) { return new Vec2(this.x * s, this.y * s); }
+            get magnitude() { return Math.sqrt(this.x * this.x + this.y * this.y); }
+            get normalize() { 
+                const mag = this.magnitude; 
+                return mag > 0 ? new Vec2(this.x / mag, this.y / mag) : new Vec2(0, 0); 
+            }
+        }
+        
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+        
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : null;
+        }
+
+        function triggerScreenShake(magnitude, duration) {
+            screenShakeMagnitude = magnitude;
+            screenShakeTimer = duration;
+        }
+
+        function createCollisionParticles(pos, color = '#FFFFFF', count = 15, size = 1, speed_mult = 1) {
+            for (let i = 0; i < count; i++) {
+                particles.push(new Particle(pos, color, 1, size, speed_mult));
+            }
+        }
+
+        function playSound(name, volume = 0.7) {
+            if (!audioUnlocked || !sfx[name]) return;
+            const sound = sfx[name].cloneNode(true);
+            sound.volume = volume;
+            sound.play().catch(e => { /* 抑制在快速重载等情况下可能发生的错误 */ });
+        }
+
+        // --- 游戏对象类 ---
+
+        class Player {
+             constructor(id, name, color, controls, asset) {
+                this.id = id; this.name = name; this.pos = new Vec2(0, 0); this.vel = new Vec2(0, 0);
+                this.radius = 15; this.color = color; this.controls = controls; this.asset = asset;
+                this.isOnPlanet = null; this.angleOnPlanet = 0;
+                this.isCharging = false; this.jumpCharge = 0; this.isEliminated = false; this.moveDir = 0;
+                this.activePowerUp = null; this.powerUpTimer = 0; this.wasJumping = false;
+                this.startingPlanet = null; this.eliminationProcessed = false;
+                this.eliminationTime = -1;
+                this.landingCooldown = 0; // 玩家被推开后，会有一个短暂的着陆冷却时间
+
+                // AI Properties
+                this.isAI = !controls;
+                this.aiState = 'idle';
+                this.aiStateTimer = Math.random() * 2 + 1;
+                this.aiTargetJumpCharge = 0;
+            }
+
+            draw() {
+                if (this.isEliminated) return;
+                ctx.save();
+                if (this.activePowerUp === 'phase') { ctx.globalAlpha = 0.5; }
+                if (this.isCharging && this.jumpCharge > 0 && this.activePowerUp !== 'box') {
+                    const barWidth = 40, barHeight = 5, chargeRatio = Math.min(this.jumpCharge / 100, 1);
+                    const chargeBarPos = new Vec2(this.pos.x, this.pos.y - this.radius - 20);
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                    ctx.fillRect(chargeBarPos.x - barWidth / 2, chargeBarPos.y, barWidth, barHeight);
+                    ctx.fillStyle = `rgba(255, 236, 59, ${0.5 + chargeRatio * 0.5})`;
+                    ctx.fillRect(chargeBarPos.x - barWidth / 2, chargeBarPos.y, barWidth * chargeRatio, barHeight);
+                }
+                ctx.translate(this.pos.x, this.pos.y);
+                let angle = this.isOnPlanet ? this.angleOnPlanet + Math.PI / 2 : (this.vel.magnitude > 0.1 ? Math.atan2(this.vel.y, this.vel.x) + Math.PI / 2 : 0);
+                ctx.rotate(angle);
+                const flash = Math.abs(Math.sin(gameTimer * 10));
+                if (this.activePowerUp === 'impact') { ctx.beginPath(); ctx.arc(0, 0, this.radius + 5, 0, 2 * Math.PI); ctx.fillStyle = `rgba(0, 191, 255, ${0.3 + flash * 0.4})`; ctx.fill(); }
+                if (this.activePowerUp === 'mine' || this.activePowerUp === 'gravityBomb') {
+                    ctx.beginPath(); ctx.arc(0, 0, this.radius + 3, 0, 2 * Math.PI); 
+                    ctx.fillStyle = this.activePowerUp === 'mine' ? `rgba(255, 0, 0, ${0.3 + flash * 0.4})` : `rgba(255, 235, 59, ${0.3 + flash * 0.4})`; 
+                    ctx.fill();
+                    ctx.save(); ctx.rotate(-angle); ctx.fillStyle = 'white'; ctx.font = '16px "ZCOOL KuaiLe"';
+                    ctx.textAlign = 'center'; ctx.fillText(this.powerUpTimer.toFixed(1), 0, this.radius + 20); ctx.restore();
+                }
+                if (this.activePowerUp === 'box') {
+                    const boxAsset = assets.powerUpBox;
+                    if (boxAsset) { ctx.drawImage(boxAsset, -this.radius * 1.5, -this.radius * 1.5, this.radius * 3, this.radius * 3); } 
+                    else { ctx.fillStyle = '#D2691E'; ctx.fillRect(-this.radius, -this.radius, this.radius * 2, this.radius * 2); }
+                    
+                    ctx.save(); 
+                    ctx.rotate(-angle); 
+                    ctx.fillStyle = 'white'; 
+                    ctx.font = '16px "ZCOOL KuaiLe"';
+                    ctx.textAlign = 'center'; 
+                    ctx.fillText(this.powerUpTimer.toFixed(1), 0, -(this.radius * 1.5) - 5);
+                    ctx.restore();
+                } else if (this.asset) { ctx.drawImage(this.asset, -this.radius * 1.25, -this.radius * 1.25, this.radius * 2.5, this.radius * 2.5);
+                } else {
+                    ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, 2 * Math.PI); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(-this.radius, -this.radius/2); ctx.lineTo(-this.radius/2, -this.radius*1.5); ctx.lineTo(0, -this.radius/2); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(this.radius, -this.radius/2); ctx.lineTo(this.radius/2, -this.radius*1.5); ctx.lineTo(0, -this.radius/2); ctx.fill();
+                    ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(-this.radius/3, -this.radius/4, 2.5, 0, 2*Math.PI); ctx.arc(this.radius/3, -this.radius/4, 2.5, 0, 2*Math.PI); ctx.fill();
+                    ctx.fillStyle = 'black'; ctx.beginPath(); ctx.arc(-this.radius/3, -this.radius/4, 1, 0, 2*Math.PI); ctx.arc(this.radius/3, -this.radius/4, 1, 0, 2*Math.PI); ctx.fill();
+                }
+                ctx.restore();
+            }
+
+            update() {
+                if (this.isEliminated) return;
+
+                if (this.landingCooldown > 0) {
+                    this.landingCooldown -= timeStep;
+                }
+
+                // Add trail particles
+                const isMoving = (this.isOnPlanet && this.moveDir !== 0) || (!this.isOnPlanet && this.vel.magnitude > 0.5);
+                if (isMoving) { // Always spawn when moving for a dense trail
+                    const p = new Particle(this.pos, this.color);
+                    p.life = Math.random() * 40 + 40; // Longer life for a long trail
+                    p.maxLife = p.life; // Set maxLife for smooth fade
+                    p.vel = new Vec2((Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2); // Very slow drift to stay on track
+                    p.radius = this.radius * (Math.random() * 0.1 + 0.15); // Much smaller, finer trail
+                    particles.push(p);
+                }
+                
+                if (this.isAI) {
+                    this.aiLogic();
+                } else {
+                    this.handleInput();
+                }
+
+                if (this.activePowerUp === 'box') {
+                    this.powerUpTimer -= timeStep;
+                    if (this.powerUpTimer <= 0) {
+                        this.activePowerUp = null;
+                    }
+                    // 盒子状态，不动
+                } else if (this.activePowerUp) {
+                    this.powerUpTimer -= timeStep;
+
+                    let shouldTrigger = this.powerUpTimer <= 0;
+
+                    if (this.activePowerUp === 'mine') {
+                        const explosionRadius = 200; // 与 triggerMineExplosion 中的范围一致
+                        const triggerRadius = explosionRadius / 2;
+                        const isOtherPlayerNearby = players.some(
+                            p => p.id !== this.id && !p.isEliminated && this.pos.sub(p.pos).magnitude < triggerRadius
+                        );
+                        if (isOtherPlayerNearby) {
+                            shouldTrigger = true;
+                        }
+                    }
+
+                    if (shouldTrigger) {
+                        if (this.activePowerUp === 'mine') triggerMineExplosion(this.pos, this.id);
+                        this.activePowerUp = null;
+                    }
+                }
+                if (this.isOnPlanet) {
+                    this.vel = new Vec2(0, 0);
+                    const speedMultiplier = this.activePowerUp === 'impact' ? 2 : 1;
+                    const speed = (4 * speedMultiplier) / this.isOnPlanet.radius;
+                    this.angleOnPlanet += this.moveDir * speed + this.isOnPlanet.rotationSpeed;
+                    const planet = this.isOnPlanet;
+                    this.pos = new Vec2(planet.pos.x + Math.cos(this.angleOnPlanet) * (planet.radius + this.radius), planet.pos.y + Math.sin(this.angleOnPlanet) * (planet.radius + this.radius));
+                } else {
+                    let totalForce = new Vec2(0, 0);
+                    const gravitySources = [...planets, ...blackHoles];
+                    gravitySources.forEach(source => {
+                        let forceDir = source.gravityReversed ? -1 : 1;
+                        const distVec = source.pos.sub(this.pos);
+                        if (distVec.magnitude < source.gravityRadius) {
+                            let forceMag = (source.mass * 5000 * forceDir) / (distVec.magnitude * distVec.magnitude);
+                            if (source.gravityReversed && Math.abs(forceMag) > 15) {
+                                forceMag = Math.sign(forceMag) * 15;
+                            }
+                            totalForce = totalForce.add(distVec.normalize.scale(forceMag));
+                        }
+                    });
+                    this.vel = this.vel.add(totalForce.scale(timeStep));
+                    
+                    // 空中微操
+                    if (this.moveDir !== 0) {
+                        const airControlForce = 0.083; // 从 0.25 下调，降低空中操控能力
+                        this.vel.x += this.moveDir * airControlForce;
+                    }
+
+                    this.pos = this.pos.add(this.vel);
+                }
+                this.checkOutOfBounds();
+            }
+
+            jump() {
+                if (!this.isOnPlanet) return;
+                if (this.activePowerUp === 'box') { this.activePowerUp = null; return; }
+                let jumpPower = 5 + (10 * (this.jumpCharge / 100));
+                if (this.activePowerUp === 'impact') { jumpPower *= 2; }
+                const jumpAngle = this.angleOnPlanet;
+                this.vel = new Vec2(Math.cos(jumpAngle) * jumpPower, Math.sin(jumpAngle) * jumpPower);
+                this.isOnPlanet = null; this.isCharging = false; this.jumpCharge = 0;
+                playSound('playerJump');
+                createCollisionParticles(this.pos, this.color, 10);
+            }
+
+            handleInput() {
+                if (this.activePowerUp === 'box') {
+                    if (!keys[this.controls.jump] && this.wasJumping) { this.activePowerUp = null; }
+                    this.wasJumping = keys[this.controls.jump]; return;
+                }
+                if (keys[this.controls.left]) { this.moveDir = -1;
+                } else if (keys[this.controls.right]) { this.moveDir = 1;
+                } else { this.moveDir = 0; }
+                if (keys[this.controls.jump]) {
+                    if (this.isOnPlanet) { this.isCharging = true; this.jumpCharge = Math.min(100, this.jumpCharge + 3.2); }
+                } else {
+                    if (this.isCharging) { this.jump(); }
+                    this.isCharging = false;
+                }
+                this.wasJumping = keys[this.controls.jump];
+            }
+            
+            aiLogic() {
+                if (this.activePowerUp === 'box') {
+                    // AI目前还不够智能，无法使用箱子，所以暂时什么都不做
+                    return;
+                }
+
+                this.aiStateTimer -= timeStep;
+
+                if (this.aiStateTimer <= 0) {
+                    if (this.isOnPlanet) {
+                        const action = Math.random();
+                        if (this.isCharging) {
+                            this.jump();
+                            this.aiState = 'in_space';
+                            this.aiStateTimer = Math.random() * 2 + 1;
+                        } else if (action < 0.3) { // 30% 几率跳跃
+                            this.aiState = 'charging';
+                            this.aiTargetJumpCharge = Math.random() * 80 + 20; // 蓄力20-100
+                            this.isCharging = true;
+                            this.jumpCharge = 0;
+                            this.moveDir = 0;
+                            this.aiStateTimer = 5; // 充电状态的最长时间
+                        } else if (action < 0.8) { // 50% 几率移动
+                            this.aiState = 'moving';
+                            this.moveDir = Math.random() < 0.5 ? -1 : 1;
+                            this.aiStateTimer = Math.random() * 1.5 + 0.5; // 移动0.5-2秒
+                        } else { // 20% 几率站着不动
+                            this.aiState = 'idle';
+                            this.moveDir = 0;
+                            this.aiStateTimer = Math.random() * 2 + 1; // 不动1-3秒
+                        }
+                    } else {
+                        // 在太空中，AI没有空中控制能力
+                        this.aiState = 'in_space';
+                        this.moveDir = 0;
+                        this.aiStateTimer = 1; // 1秒后重新检查
+                    }
+                }
+
+                if (this.aiState === 'charging' && this.isCharging) {
+                    if (this.isOnPlanet) {
+                        this.jumpCharge = Math.min(100, this.jumpCharge + 2.25);
+                        if (this.jumpCharge >= this.aiTargetJumpCharge) {
+                            this.jump();
+                            this.aiState = 'in_space';
+                            this.aiStateTimer = Math.random() * 2 + 1;
+                        }
+                    } else {
+                        // 如果不在星球上（例如被推开），取消蓄力
+                        this.isCharging = false;
+                        this.aiState = 'in_space';
+                        this.aiStateTimer = 1;
+                    }
+                }
+            }
+
+            checkOutOfBounds() {
+                const buffer = this.radius;
+                if (this.pos.x < -buffer) {
+                    this.pos.x = canvas.width + buffer;
+                } else if (this.pos.x > canvas.width + buffer) {
+                    this.pos.x = -buffer;
+                }
+                if (this.pos.y < -buffer) {
+                    this.pos.y = canvas.height + buffer;
+                } else if (this.pos.y > canvas.height + buffer) {
+                    this.pos.y = -buffer;
+                }
+            }
+        }
+        
+        class PowerUp {
+            constructor(planet, angle, type) {
+                this.planet = planet; this.angle = angle; this.type = type;
+                this.pos = new Vec2(0, 0); 
+                this.radius = 25; // For 100x100 icon, collision radius is 50
+                this.life = 10;
+                this.asset = assets[`powerUp${type.charAt(0).toUpperCase() + type.slice(1)}`];
+                this.color = {'mine': '#ff0000', 'impact': '#00BFFF', 'gravityBomb': '#FFEB3B', 'box': '#D2691E', 'phase': '#DA70D6', 'shield': '#F0E68C', 'blackhole': '#800080'}[type];
+                this.name = {
+                    'mine': '猫猫炸弹', 
+                    'blackhole': '黑洞', 
+                    'impact': '猫薄荷', 
+                    'box': '蹲箱子', 
+                    'phase': '隐匿', 
+                    'shield': '护盾', 
+                    'gravityBomb': '重力反转'
+                }[type];
+            }
+
+            update() {
+                this.life -= timeStep; this.angle += this.planet.rotationSpeed;
+                // Use a smaller offset for positioning to keep it on the surface, not floating
+                const positionOffset = 15;
+                this.pos.x = this.planet.pos.x + Math.cos(this.angle) * (this.planet.radius + positionOffset);
+                this.pos.y = this.planet.pos.y + Math.sin(this.angle) * (this.planet.radius + positionOffset);
+            }
+
+            draw() {
+                ctx.save(); ctx.translate(this.pos.x, this.pos.y);
+                const flash = Math.abs(Math.sin(gameTimer * 5)); ctx.globalAlpha = 0.7 + flash * 0.3;
+                const drawSize = 50;
+                if (this.asset) { ctx.drawImage(this.asset, -drawSize / 2, -drawSize / 2, drawSize, drawSize); } 
+                else { ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI * 2); ctx.fill(); }
+
+                if (this.name) {
+                    ctx.fillStyle = 'white';
+                    ctx.font = '16px "ZCOOL KuaiLe"';
+                    ctx.textAlign = 'center';
+                    ctx.shadowColor = 'black';
+                    ctx.shadowBlur = 4;
+                    ctx.fillText(this.name, 0, drawSize / 2 + 8);
+                }
+                
+                ctx.restore();
+            }
+        }
+
+        class BlackHole {
+            constructor(pos) {
+                this.pos = pos; this.life = 8; this.radius = 15; this.gravityRadius = 250;
+                this.mass = 300; this.currentRadius = 0; this.maxRadius = 70; // Doubled kill range
+                this.rotation = 0;
+                this.rotationSpeed = 0.02; // 逆时针缓慢旋转
+            }
+            update() {
+                this.life -= timeStep;
+                if (this.currentRadius < this.maxRadius) { this.currentRadius += 3; } // Faster growth
+                this.rotation += this.rotationSpeed;
+            }
+            draw() {
+                // Gravity field indicator
+                const pulse = Math.abs(Math.sin(gameTimer * 3));
+                ctx.beginPath();
+                ctx.arc(this.pos.x, this.pos.y, this.gravityRadius, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(148, 0, 211, ${0.1 + pulse * 0.1})`; // DarkViolet
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // Core (kill zone)
+                ctx.save();
+                ctx.translate(this.pos.x, this.pos.y);
+                ctx.rotate(this.rotation);
+                const blackHoleAsset = assets.blackhole;
+                if (blackHoleAsset) {
+                    const drawSize = this.currentRadius * 2;
+                    ctx.drawImage(blackHoleAsset, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
+                } else {
+                    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.currentRadius);
+                    gradient.addColorStop(0, '#4B0082'); gradient.addColorStop(0.7, '#000000'); gradient.addColorStop(1, 'rgba(0,0,0,0)');
+                    ctx.fillStyle = gradient; ctx.beginPath(); ctx.arc(0, 0, this.currentRadius, 0, Math.PI * 2); ctx.fill();
+                }
+                ctx.restore();
+            }
+        }
+
+        class Planet {
+            constructor(x, y, radius, mass, color, rotationSpeed, asset) {
+                this.pos = new Vec2(x, y); this.radius = radius; this.mass = mass; this.color = color;
+                this.gravityRadius = radius * 3.0; this.rotationSpeed = rotationSpeed;
+                this.currentRotation = Math.random() * Math.PI * 2;
+                this.asset = asset; this.craters = []; this.gravityReversed = false;
+                this.vel = new Vec2(0, 0); this.isMoving = false;
+                this.isPendingTransformation = false;
+                this.noPlayerOnSurfaceSince = 0;
+                this.gravityWaves = [];
+                this.gravityWaveTimer = 0;
+            }
+
+            draw() {
+                if (this.isPendingTransformation) {
+                    ctx.save();
+                    const flash = Math.abs(Math.sin(gameTimer * 10));
+                    ctx.beginPath();
+                    ctx.arc(this.pos.x, this.pos.y, this.radius + 5 + flash * 5, 0, 2 * Math.PI);
+                    ctx.strokeStyle = `rgba(255, 69, 0, ${0.4 + flash * 0.4})`; // Orangey-red
+                    ctx.lineWidth = 5;
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                if (this.gravityReversed) {
+                    ctx.save();
+                    this.gravityWaves.forEach(wave => {
+                        ctx.beginPath();
+                        ctx.arc(this.pos.x, this.pos.y, wave.radius, 0, 2 * Math.PI);
+                        ctx.strokeStyle = `rgba(255, 235, 59, ${wave.opacity})`;
+                        ctx.lineWidth = 3;
+                        ctx.stroke();
+                    });
+                    ctx.restore();
+                }
+                const rgb = hexToRgb(this.color);
+                ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, this.gravityRadius, 0, 2 * Math.PI);
+                ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.05)`; ctx.fill();
+                ctx.save(); ctx.translate(this.pos.x, this.pos.y); ctx.rotate(this.currentRotation);
+                if (this.asset) {
+                    const drawSize = this.radius * 2;
+                    ctx.drawImage(this.asset, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
+                } else {
+                    ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, 2 * Math.PI); ctx.fillStyle = this.color; ctx.fill();
+                    if (this.craters.length === 0) {
+                        for (let i = 0; i < this.radius / 5; i++) {
+                            this.craters.push({ angle: Math.random() * 2 * Math.PI, size: Math.random() * 0.15 + 0.05, depth: Math.random() * 0.5 + 0.5, x_offset: (Math.random() - 0.5) * 0.5, y_offset: (Math.random() - 0.5) * 0.5 });
+                        }
+                    }
+                    this.craters.forEach(c => {
+                        const x = Math.cos(c.angle) * this.radius * 0.7 + c.x_offset; const y = Math.sin(c.angle) * this.radius * 0.7 + c.y_offset;
+                        const r = this.radius * c.size; const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+                        grad.addColorStop(0, 'rgba(0,0,0,0)'); grad.addColorStop(1, `rgba(0,0,0,${0.2 * c.depth})`);
+                        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.fill();
+                    });
+                }
+                ctx.restore();
+            }
+            update() { 
+                this.currentRotation += this.rotationSpeed;
+                if (this.isMoving) {
+                    this.pos = this.pos.add(this.vel);
+                }
+
+                if (this.gravityReversed) {
+                    this.gravityWaveTimer -= timeStep;
+                    if (this.gravityWaveTimer <= 0) {
+                        this.gravityWaves.push({ radius: this.radius, opacity: 0.8 });
+                        this.gravityWaveTimer = 0.4; // 每 0.4 秒产生一个新波
+                    }
+                }
+
+                // 更新并过滤波
+                this.gravityWaves.forEach(wave => {
+                    wave.radius += 80 * timeStep; // 扩散速度
+                    wave.opacity -= 1.0 * timeStep;   // 渐隐速度
+                });
+                this.gravityWaves = this.gravityWaves.filter(wave => wave.opacity > 0);
+            }
+        }
+        
+        class Meteor {
+            constructor(pos, vel, radius, asset, isFromShower = false) {
+                this.pos = pos; this.vel = vel; this.radius = radius; this.asset = asset;
+                this.rotation = Math.random() * Math.PI * 2;
+
+                let minSpeedPerFrame;
+                let maxSpeedPerFrame;
+
+                if (isFromShower) {
+                    // 流星雨中的流星转速更快
+                    minSpeedPerFrame = (Math.PI * 2) / (2 * 60);   // 2秒一圈
+                    maxSpeedPerFrame = (Math.PI * 2) / (0.5 * 60); // 0.5秒一圈
+                } else {
+                    // 正常流星转速
+                    minSpeedPerFrame = (Math.PI * 2) / (10 * 60); // 10秒一圈
+                    maxSpeedPerFrame = (Math.PI * 2) / (5 * 60);  // 5秒一圈
+                }
+
+                const speed = Math.random() * (maxSpeedPerFrame - minSpeedPerFrame) + minSpeedPerFrame;
+                this.rotationSpeed = speed * (Math.random() < 0.5 ? 1 : -1);
+            }
+            update() { this.pos = this.pos.add(this.vel); this.rotation += this.rotationSpeed; }
+            draw() {
+                ctx.save(); ctx.translate(this.pos.x, this.pos.y); ctx.rotate(this.rotation);
+                if (this.asset) {
+                    const drawSize = this.radius * 2;
+                    ctx.drawImage(this.asset, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
+                } else {
+                    ctx.fillStyle = '#A0522D'; ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, 2 * Math.PI); ctx.fill();
+                }
+                ctx.restore();
+            }
+            isOffscreen() {
+                const buffer = this.radius * 2;
+                return this.pos.x < -buffer || this.pos.x > canvas.width + buffer || this.pos.y < -buffer || this.pos.y > canvas.height + buffer;
+            }
+        }
+        
+        class Shield {
+            constructor(planet) { this.planet = planet; this.life = 15; this.hits = 5; this.radius = planet.radius + 30; }
+            update() { this.life -= timeStep; if (this.hits <= 0) this.life = 0; }
+            draw() {
+                const opacity = 0.2 + (this.hits / 5) * 0.6; const lineWidth = 3 + (this.hits / 5) * 4;
+                ctx.beginPath(); ctx.arc(this.planet.pos.x, this.planet.pos.y, this.radius, 0, 2 * Math.PI);
+                ctx.strokeStyle = `rgba(240, 230, 140, ${opacity})`; ctx.lineWidth = lineWidth; ctx.stroke();
+            }
+        }
+        
+        class Particle {
+            constructor(pos, color, count = 1, size = 1, speed_mult = 1) {
+                this.pos = new Vec2(pos.x, pos.y);
+                const angle = Math.random() * 2 * Math.PI;
+                const speed = (Math.random() * 3 + 1) * speed_mult;
+                this.vel = new Vec2(Math.cos(angle) * speed, Math.sin(angle) * speed);
+                this.radius = (Math.random() * 2 + 1) * size;
+                this.life = Math.random() * 30 + 30; // 生命周期（帧）
+                this.maxLife = this.life; // For smooth alpha fade
+                this.color = color; this.rgb = hexToRgb(this.color);
+            }
+            draw() {
+                if (!this.rgb) return;
+                ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, this.radius, 0, 2 * Math.PI);
+                ctx.fillStyle = `rgba(${this.rgb.r},${this.rgb.g},${this.rgb.b},${this.life / this.maxLife})`; ctx.fill();
+            }
+            update() { this.pos = this.pos.add(this.vel); this.vel = this.vel.scale(0.98); this.life--; }
+        }
+
+        class PendingBlackHole {
+            constructor(pos) {
+                this.pos = pos;
+                this.life = 3; // 3 seconds
+                this.maxLife = 3;
+                this.particleSpawnTimer = 0;
+            }
+
+            update() {
+                this.life -= timeStep;
+
+                this.particleSpawnTimer -= timeStep;
+                if (this.particleSpawnTimer <= 0) {
+                    const count = 3;
+                    for (let i = 0; i < count; i++) {
+                        // Particles spawn far away and move towards the center.
+                        const spawnDist = 100 + Math.random() * 50;
+                        const angle = Math.random() * Math.PI * 2;
+                        const pPos = this.pos.add(new Vec2(Math.cos(angle) * spawnDist, Math.sin(angle) * spawnDist));
+                        
+                        const p = new Particle(pPos, '#4B0082'); // Indigo color
+                        p.vel = this.pos.sub(pPos).normalize.scale(1.5 + Math.random() * 1.5);
+                        p.life = spawnDist / p.vel.magnitude; // Lifetime to reach center
+                        p.radius = Math.random() * 2 + 1;
+                        particles.push(p);
+                    }
+                    this.particleSpawnTimer = 0.15;
+                }
+
+                if (this.life <= 0) {
+                    triggerBlackHole(this.pos);
+                }
+            }
+
+            draw() {
+                // Draw a visual indicator at the center
+                const progress = 1 - (this.life / this.maxLife); // 0 to 1
+                const pulse = Math.abs(Math.sin(progress * Math.PI * 8)); // Pulses faster as it's about to spawn
+                
+                ctx.save();
+                ctx.globalAlpha = 0.5 + pulse * 0.5;
+                ctx.beginPath();
+                const coreRadius = 25 * progress; // grows to 25
+                const gradient = ctx.createRadialGradient(this.pos.x, this.pos.y, 0, this.pos.x, this.pos.y, coreRadius);
+                gradient.addColorStop(0, '#4B0082');
+                gradient.addColorStop(0.8, '#2d004f');
+                gradient.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = gradient;
+                ctx.arc(this.pos.x, this.pos.y, coreRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // --- 游戏逻辑 ---
+        function init() {
+            const container = document.getElementById('game-container');
+            if (container.clientWidth === 0 || container.clientHeight === 0) {
+                requestAnimationFrame(init); return;
+            }
+            canvas.width = container.clientWidth; canvas.height = container.clientHeight;
+
+            
+            players = [];
+            for (let i = 0; i < 4; i++) {
+                const playerData = allPlayersData[i];
+                const isHuman = playerData.id <= playerCount;
+                players.push(new Player(
+                    playerData.id,
+                    playerData.name,
+                    playerData.color,
+                    isHuman ? playerData.controls : null,
+                    assets[playerData.assetName]
+                ));
+            }
+            
+            planets = [];
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // 1. 定义4个起始点，然后随机打乱它们
+            let startPositions = [
+                new Vec2(w * 0.2, h * 0.2),   // Top-left
+                new Vec2(w * 0.8, h * 0.2),   // Top-right
+                new Vec2(w * 0.2, h * 0.8),   // Bottom-left
+                new Vec2(w * 0.8, h * 0.8)    // Bottom-right
+            ];
+            shuffleArray(startPositions);
+            
+            for (let i = 0; i < 4; i++) {
+                const playerData = allPlayersData[i]; // 玩家数据按顺序 P1, P2...
+                const position = startPositions[i];   // 位置是随机的
+                const minAbsSpeed = 0.0017; // ~60s for 360 deg
+                const maxAbsSpeed = 0.0105;  // ~10s for 360 deg
+                const speed = Math.random() * (maxAbsSpeed - minAbsSpeed) + minAbsSpeed;
+                const rotationSpeed = speed * (Math.random() < 0.5 ? 1 : -1);
+                // 为每个玩家在随机位置创建匹配其信息的星球
+                planets.push(new Planet(position.x, position.y, 95, 150, playerData.color, rotationSpeed, assets[playerData.assetName]));
+            }
+
+            // 2. Generate additional random planets
+            const numRandomPlanets = Math.floor(Math.random() * 7) + 6; // 随机 6-12 个额外星球
+            const minRadius = 50, maxRadius = 130;
+            const padding = 30;
+
+            for (let i = 0; i < numRandomPlanets; i++) {
+                let newPlanetPos, newPlanetRadius, overlapped;
+                let attempts = 0;
+                do {
+                    overlapped = false;
+                    newPlanetRadius = Math.random() * (maxRadius - minRadius) + minRadius;
+                    newPlanetPos = new Vec2(
+                        Math.random() * (w - 2 * newPlanetRadius - 2 * padding) + newPlanetRadius + padding,
+                        Math.random() * (h - 2 * newPlanetRadius - 2 * padding) + newPlanetRadius + padding
+                    );
+                    
+                    for (const p of planets) {
+                        if (p.pos.sub(newPlanetPos).magnitude < p.radius + newPlanetRadius + padding) {
+                            overlapped = true;
+                            break;
+                        }
+                    }
+                    attempts++;
+                } while (overlapped && attempts < 50);
+
+                if (!overlapped) {
+                    const mass = 90 + (newPlanetRadius - minRadius) * 1.6;
+                    const color = `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`;
+                    const assetKeys = ['planet1', 'planet2', 'planet3', 'planet4', 'planet5', 'planet6', 'planet7'];
+                    const randomAsset = assets[assetKeys[Math.floor(Math.random() * assetKeys.length)]];
+                    
+                    const minAbsSpeed = 0.0017; // ~60s for 360 deg
+                    const maxAbsSpeed = 0.0105;  // ~10s for 360 deg
+                    const speed = Math.random() * (maxAbsSpeed - minAbsSpeed) + minAbsSpeed;
+                    const rotationSpeed = speed * (Math.random() < 0.5 ? 1 : -1);
+
+                    planets.push(new Planet(newPlanetPos.x, newPlanetPos.y, newPlanetRadius, mass, color, rotationSpeed, randomAsset));
+                }
+            }
+            
+            // 3. Select random (non-starting) planets to be mobile based on count
+            let numMovingPlanets;
+            if (numRandomPlanets <= 8)      { numMovingPlanets = 2; }
+            else if (numRandomPlanets <= 11) { numMovingPlanets = 3; }
+            else                             { numMovingPlanets = 4; }
+
+            const randomPlanets = planets.slice(4); // Exclude the 4 starting planets
+            shuffleArray(randomPlanets);
+            for(let i = 0; i < Math.min(numMovingPlanets, randomPlanets.length); i++) {
+                const p = randomPlanets[i];
+                p.isMoving = true;
+                const speed = Math.random() * 0.4 + 0.2; // A slow, gentle speed
+                const angle = Math.random() * Math.PI * 2;
+                p.vel = new Vec2(Math.cos(angle) * speed, Math.sin(angle) * speed);
+            }
+
+            players.forEach((p, i) => {
+                const startingPlanet = planets[i]; // 玩家i对应星球i (其位置是随机的)
+                p.isOnPlanet = startingPlanet; p.angleOnPlanet = -Math.PI / 2;
+                p.isEliminated = false; p.activePowerUp = null;
+                p.startingPlanet = startingPlanet;
+                p.eliminationProcessed = false;
+            });
+
+            particles = []; meteors = []; powerUps = []; blackHoles = []; shields = []; explosionIndicators = []; pendingBlackHoles = [];
+
+            // 为每个玩家创建起始位置指示器
+            playerStartIndicators = [];
+            players.forEach(p => {
+                if (!p.isEliminated) {
+                    playerStartIndicators.push({
+                        player: p,
+                        maxRadius: p.radius + 80, // 初始尺寸更大
+                        life: 1.5,                // 收缩更快
+                        maxLife: 1.5,
+                        color: p.color
+                    });
+                }
+            });
+
+            // 开局时在不同星球上生成道具 (2个进攻, 1个功能)
+            const attackPowerUpTypes = powerUpInfo.filter(p => p.category === 'attack').map(p => p.type);
+            const functionalPowerUpTypes = powerUpInfo.filter(p => p.category === 'functional').map(p => p.type);
+            
+            let startingPowerUpTypes = [];
+            if (attackPowerUpTypes.length > 0) {
+                for (let i=0; i<2; i++) {
+                    startingPowerUpTypes.push(attackPowerUpTypes[Math.floor(Math.random() * attackPowerUpTypes.length)]);
+                }
+            }
+            if (functionalPowerUpTypes.length > 0) {
+                startingPowerUpTypes.push(functionalPowerUpTypes[Math.floor(Math.random() * functionalPowerUpTypes.length)]);
+            }
+
+            const shuffledPlanets = [...planets].sort(() => 0.5 - Math.random());
+            for (let i = 0; i < Math.min(startingPowerUpTypes.length, shuffledPlanets.length); i++) {
+                const planet = shuffledPlanets[i];
+                const type = startingPowerUpTypes[i];
+                const angle = Math.random() * 2 * Math.PI;
+                powerUps.push(new PowerUp(planet, angle, type));
+            }
+
+            gameTimer = 0;
+            gameTimerDisplay.textContent = '00:00';
+            isMeteorShowerImminent = false;
+            meteorShowerWarningTime = 0;
+            attackPowerUpSpawnTimer = 4;
+            functionPowerUpSpawnTimer = 12;
+            nextShowerIndex = 0;
+            post60sShowerTimer = 0; // 重置计时器以保证"再来一局"功能正常
+            screenShakeTimer = 0;
+            screenShakeMagnitude = 0;
+            gameState = 'playing';
+        }
+        
+        // --- 生成函数 ---
+        function spawnAttackPowerUp() {
+            if (powerUps.length >= 6) return;
+            const planet = planets[Math.floor(Math.random() * planets.length)];
+            const angle = Math.random() * 2 * Math.PI;
+            const types = ['mine', 'mine', 'mine', 'mine', 'impact'];
+            powerUps.push(new PowerUp(planet, angle, types[Math.floor(Math.random() * types.length)]));
+        }
+        function spawnFunctionPowerUp() {
+            // 定义功能性道具的类型列表
+            const functionalTypes = ['blackhole', 'box', 'phase', 'shield', 'gravityBomb'];
+            // 计算当前地图上已有的功能性道具数量
+            const currentFunctionalCount = powerUps.filter(p => functionalTypes.includes(p.type)).length;
+
+            // 当功能性道具少于2个，并且总道具少于6个时，才生成新的功能道具
+            if (currentFunctionalCount >= 4 || powerUps.length >= 8) return;
+
+            const planet = planets[Math.floor(Math.random() * planets.length)];
+            const angle = Math.random() * 2 * Math.PI;
+            const types = ['blackhole' ,'box', 'phase', 'shield', 'gravityBomb'];
+            powerUps.push(new PowerUp(planet, angle, types[Math.floor(Math.random() * types.length)]));
+        }
+        function spawnMeteor() {
+            const radius = (Math.random() * 25 + 15) * 2;
+            const asset = Math.random() > 0.5 ? assets.meteor1 : assets.meteor2;
+            let pos;
+            const edge = Math.floor(Math.random() * 4);
+            switch (edge) {
+                case 0: pos = new Vec2(Math.random() * canvas.width, -radius); break;
+                case 1: pos = new Vec2(canvas.width + radius, Math.random() * canvas.height); break;
+                case 2: pos = new Vec2(Math.random() * canvas.width, canvas.height + radius); break;
+                case 3: pos = new Vec2(-radius, Math.random() * canvas.height); break;
+            }
+            const target = new Vec2(canvas.width * (Math.random() * 0.6 + 0.2), canvas.height * (Math.random() * 0.6 + 0.2));
+            const speed = Math.random() * 1.5 + 0.5;
+            const vel = target.sub(pos).normalize.scale(speed);
+            meteors.push(new Meteor(pos, vel, radius, asset));
+        }
+        function spawnMeteorShower(meteorCount) {
+            const numMeteors = meteorCount;
+            const baseSpeed = 4.5 + Math.random();
+            const direction = new Vec2(1, 1).normalize;
+            for (let i = 0; i < numMeteors; i++) {
+                const radius = (Math.random() * 20 + 10) * 2;
+                let pos;
+                const edgePos = Math.random() * (canvas.width + canvas.height);
+                if (edgePos < canvas.width) { pos = new Vec2(edgePos, -radius); } 
+                else { pos = new Vec2(-radius, edgePos - canvas.width); }
+                const speed = baseSpeed + (Math.random() - 0.5);
+                const vel = direction.scale(speed);
+                const asset = assets.star;
+                meteors.push(new Meteor(pos, vel, radius, asset, true));
+            }
+        }
+        
+        // --- 道具触发函数 ---
+        function triggerMineExplosion(pos, ownerId) {
+            playSound('mineExplosion', 1.0);
+
+            explosionIndicators.push({ 
+                pos: new Vec2(pos.x, pos.y), 
+                currentRadius: 0, 
+                maxRadius: 200, 
+                life: 0.4, 
+                maxLife: 0.4 
+            });
+
+            // Enhanced Particles: Core flash, main explosion, smoke
+            createCollisionParticles(pos, '#FFFF00', 40, 2.5, 3.5); // Yellow flash
+            createCollisionParticles(pos, '#FFA500', 70, 2.2, 2.8); // Orange main body
+            createCollisionParticles(pos, '#FF4500', 50, 1.8, 1.5);   // Red/dark orange embers
+
+            let hitPlayer = false;
+            players.forEach(p => {
+                if (p.id !== ownerId && !p.isEliminated && p.pos.sub(pos).magnitude < 200) {
+                    p.isOnPlanet = null; p.vel = p.pos.sub(pos).normalize.scale(15);
+                    p.landingCooldown = 0.2; // 施加0.2秒的着陆冷却，防止立即粘回星球
+                    hitPlayer = true;
+                }
+            });
+            if (hitPlayer) {
+                triggerScreenShake(12, 0.3); // Increased shake for more impact
+            }
+        }
+        function triggerGravityBomb(pos) {
+            createCollisionParticles(pos, '#FFEB3B', 50, 2, 2);
+            let closestPlanet = null, minDistance = Infinity;
+            planets.forEach(p => {
+                const dist = p.pos.sub(pos).magnitude;
+                if (dist < minDistance) { minDistance = dist; closestPlanet = p; }
+            });
+            if (closestPlanet) {
+                closestPlanet.gravityReversed = true;
+                setTimeout(() => { closestPlanet.gravityReversed = false; }, 5000);
+            }
+        }
+        function triggerBlackHole(pos) {
+            blackHoles.push(new BlackHole(pos));
+            createCollisionParticles(pos, '#4B0082', 30, 1.5, 0.5);
+        }
+        
+        function handlePlayerElimination(player) {
+            if (player.startingPlanet && planets.includes(player.startingPlanet)) {
+                const planet = player.startingPlanet;
+                const newBlackHole = new BlackHole(planet.pos);
+                
+                newBlackHole.life = Infinity; // Permanent for the round
+                newBlackHole.mass = planet.mass * 2;
+                newBlackHole.gravityRadius = planet.gravityRadius * 1.5;
+                newBlackHole.maxRadius = planet.radius; // Kill radius is the planet's original size
+                
+                blackHoles.push(newBlackHole);
+
+                const planetIndex = planets.indexOf(planet);
+                if (planetIndex > -1) {
+                    planets.splice(planetIndex, 1);
+                }
+            }
+        }
+        
+        // --- 碰撞处理 ---
+        function handlePlanetCollisions() {
+            const movingPlanets = planets.filter(p => p.isMoving);
+            
+            for (let i = 0; i < movingPlanets.length; i++) {
+                const p1 = movingPlanets[i];
+
+                // Wall collisions
+                if ((p1.pos.x - p1.radius < 0 && p1.vel.x < 0) || (p1.pos.x + p1.radius > canvas.width && p1.vel.x > 0)) {
+                    p1.vel.x *= -1;
+                }
+                if ((p1.pos.y - p1.radius < 0 && p1.vel.y < 0) || (p1.pos.y + p1.radius > canvas.height && p1.vel.y > 0)) {
+                    p1.vel.y *= -1;
+                }
+
+                // Planet-planet collisions
+                for (let j = 0; j < planets.length; j++) {
+                    const p2 = planets[j];
+                    if (p1 === p2) continue;
+
+                    const distVec = p1.pos.sub(p2.pos);
+                    const dist = distVec.magnitude;
+
+                    if (dist < p1.radius + p2.radius) {
+                        // Player Crush Logic
+                        players.forEach(player => {
+                            if (player.isEliminated) return;
+                            const checkCrush = (pl, planetA, planetB) => {
+                                if (!pl.isEliminated && pl.isOnPlanet === planetA && pl.pos.sub(planetB.pos).magnitude < planetB.radius + pl.radius) {
+                                    addEliminationMessage(pl);
+                                    pl.isEliminated = true;
+                                    pl.eliminationTime = gameTimer;
+                                    playSound('playerEliminated');
+                                    createCollisionParticles(pl.pos, '#ff4d4d', 40, 1.8, 1.5);
+                                    triggerScreenShake(20, 0.5);
+                                }
+                            };
+                            checkCrush(player, p1, p2);
+                            checkCrush(player, p2, p1);
+                        });
+                        
+                        // Collision Resolution
+                        const n = distVec.normalize;
+                        const overlap = p1.radius + p2.radius - dist;
+
+                        if (p2.isMoving) { // Moving-Moving collision
+                            if (i >= movingPlanets.indexOf(p2)) continue; // Process each pair only once
+
+                            p1.pos = p1.pos.add(n.scale(overlap / 2));
+                            p2.pos = p2.pos.sub(n.scale(overlap / 2));
+                            
+                            const t = new Vec2(-n.y, n.x);
+                            const v1n = p1.vel.x * n.x + p1.vel.y * n.y, v1t = p1.vel.x * t.x + p1.vel.y * t.y;
+                            const v2n = p2.vel.x * n.x + p2.vel.y * n.y, v2t = p2.vel.x * t.x + p2.vel.y * t.y;
+                            
+                            const v1nf = (v1n * (p1.mass - p2.mass) + 2 * p2.mass * v2n) / (p1.mass + p2.mass);
+                            const v2nf = (v2n * (p2.mass - p1.mass) + 2 * p1.mass * v1n) / (p1.mass + p2.mass);
+
+                            p1.vel = n.scale(v1nf).add(t.scale(v1t));
+                            p2.vel = n.scale(v2nf).add(t.scale(v2t));
+
+                        } else { // Moving-Static collision
+                            p1.pos = p1.pos.add(n.scale(overlap));
+                            const dot = p1.vel.x * n.x + p1.vel.y * n.y;
+                            p1.vel = p1.vel.sub(n.scale(2 * dot));
+                        }
+                        createCollisionParticles(p1.pos.add(n.scale(-p1.radius)), '#cccccc', 20, 1, 0.8);
+                    }
+                }
+            }
+        }
+        
+        function handleCollisions() {
+            // 玩家 vs 星球
+            players.forEach(p => {
+                if (p.isOnPlanet || p.isEliminated || p.landingCooldown > 0) return;
+                planets.forEach(pl => {
+                    const distVec = p.pos.sub(pl.pos);
+                    if (distVec.magnitude < pl.radius + p.radius) {
+                        p.isOnPlanet = pl; p.angleOnPlanet = Math.atan2(distVec.y, distVec.x);
+                        playSound('playerLand');
+                    }
+                });
+            });
+            // 陨石 vs 护盾
+            for (let i = meteors.length - 1; i >= 0; i--) {
+                const m = meteors[i];
+                for (let j = shields.length - 1; j >= 0; j--) {
+                    const s = shields[j];
+                    if (m.pos.sub(s.planet.pos).magnitude < s.radius + m.radius) {
+                        meteors.splice(i, 1); s.hits--; createCollisionParticles(m.pos, '#F0E68C');
+                        if (s.hits <= 0) shields.splice(j, 1);
+                        break;
+                    }
+                }
+            }
+            // 玩家 vs 陨石
+            players.forEach(p => {
+                if (p.isEliminated || p.activePowerUp === 'box' || p.activePowerUp === 'phase') return;
+                meteors.forEach(m => {
+                    if (p.pos.sub(m.pos).magnitude < p.radius + m.radius) {
+                        if (!p.isEliminated) {
+                            addEliminationMessage(p);
+                            p.isEliminated = true; 
+                            p.eliminationTime = gameTimer;
+                            createCollisionParticles(p.pos, '#ff4d4d', 30, 1.5, 1.2);
+                            playSound('playerEliminated');
+                            triggerScreenShake(10, 0.3);
+                        }
+                    }
+                });
+            });
+            // 玩家/陨石 vs 黑洞
+            [...players, ...meteors].forEach(entity => {
+                if (entity.isEliminated) return;
+                blackHoles.forEach(bh => {
+                    if (entity.pos.sub(bh.pos).magnitude < bh.currentRadius) {
+                        if (!entity.isEliminated) {
+                            if (entity instanceof Player) {
+                                addEliminationMessage(entity);
+                                entity.isEliminated = true;
+                                entity.eliminationTime = gameTimer;
+                                playSound('playerEliminated');
+                                triggerScreenShake(15, 0.4);
+                            } else {
+                                entity.isEliminated = true; 
+                            }
+                            createCollisionParticles(entity.pos, '#4B0082', 20, 1.2, 0.8);
+                        }
+                    }
+                });
+            });
+            // 玩家 vs 道具
+            for (let i = powerUps.length - 1; i >= 0; i--) {
+                const pU = powerUps[i];
+                for (const p of players) {
+                    if (!p.isEliminated && p.activePowerUp === null && p.pos.sub(pU.pos).magnitude < p.radius + p.radius) {
+                        let pickedUp = false;
+
+                        if (pU.type === 'blackhole') {
+                            // Blackhole is triggered with a delay after pickup, no matter where.
+                            pendingBlackHoles.push(new PendingBlackHole(pU.pos));
+                            pickedUp = true;
+                        } else if (p.isOnPlanet) {
+                            // These power-ups only work if picked up on a planet.
+                            if (pU.type === 'shield') {
+                                shields.push(new Shield(p.isOnPlanet));
+                                pickedUp = true;
+                            } else if (pU.type === 'gravityBomb') {
+                                triggerGravityBomb(p.isOnPlanet.pos);
+                                pickedUp = true;
+                            }
+                        }
+
+                        // These power-ups are assigned to the player to be used/triggered later.
+                        const assignablePowerUps = ['mine', 'impact', 'box', 'phase'];
+                        if (!pickedUp && assignablePowerUps.includes(pU.type)) {
+                            p.activePowerUp = pU.type;
+                            p.powerUpTimer = { 'box': 5, 'phase': 4, 'mine': 5 }[pU.type] || 3;
+                            pickedUp = true;
+                        }
+
+                        if (pickedUp) {
+                            playSound('getPowerUp');
+                            powerUps.splice(i, 1);
+                            break; // Next powerup
+                        }
+                    }
+                }
+            }
+            // 玩家 vs 玩家
+            for (let i = 0; i < players.length; i++) {
+                for (let j = i + 1; j < players.length; j++) {
+                    const p1 = players[i], p2 = players[j];
+                    const noCollide = p1.isEliminated || p2.isEliminated || p1.activePowerUp === 'phase' || p2.activePowerUp === 'phase' || p1.activePowerUp === 'box' || p2.activePowerUp === 'box';
+                    if (noCollide) continue;
+                    const distVec = p1.pos.sub(p2.pos);
+                    const dist = distVec.magnitude;
+                    if (dist < p1.radius + p2.radius) {
+                        const impactPlayer = p1.activePowerUp === 'impact' ? p1 : (p2.activePowerUp === 'impact' ? p2 : null);
+                        if (impactPlayer) {
+                            const otherPlayer = impactPlayer === p1 ? p2 : p1;
+                            playSound('impactHit');
+                            createCollisionParticles(otherPlayer.pos, '#00BFFF', 30, 1.5, 1.5);
+                            otherPlayer.isOnPlanet = null; otherPlayer.vel = otherPlayer.pos.sub(impactPlayer.pos).normalize.scale(20);
+                            impactPlayer.activePowerUp = null;
+                            triggerScreenShake(8, 0.2);
+                        } else if (!p1.isOnPlanet || !p2.isOnPlanet || p1.isOnPlanet !== p2.isOnPlanet) {
+                            createCollisionParticles(p1.pos.add(distVec.scale(0.5)), '#FFFFFF', 15);
+                            const n = distVec.normalize, t = new Vec2(-n.y, n.x);
+                            const v1 = p1.vel.magnitude > 0.1 ? p1.vel : new Vec2(0, 0), v2 = p2.vel.magnitude > 0.1 ? p2.vel : new Vec2(0, 0);
+                            const m1 = p1.isOnPlanet ? 5 : 1, m2 = p2.isOnPlanet ? 5 : 1;
+                            const v1n = n.x*v1.x+n.y*v1.y, v1t = t.x*v1.x+t.y*v1.y, v2n = n.x*v2.x+n.y*v2.y, v2t = t.x*v2.x+t.y*v2.y;
+                            const v1nf = (v1n * (m1 - m2) + 2 * m2 * v2n) / (m1 + m2), v2nf = (v2n * (m2 - m1) + 2 * m1 * v1n) / (m1 + m2);
+                            p1.vel = n.scale(v1nf).add(t.scale(v1t)).scale(1.2); p2.vel = n.scale(v2nf).add(t.scale(v2t)).scale(1.2);
+                            p1.isOnPlanet = null; p2.isOnPlanet = null;
+                            p1.eliminationTime = -1;
+                            p2.eliminationTime = -1;
+                            const overlap = p1.radius + p2.radius - dist;
+                            p1.pos = p1.pos.add(n.scale(overlap / 2)); p2.pos = p2.pos.sub(n.scale(overlap / 2));
+                        } else {
+                            createCollisionParticles(p1.pos.add(distVec.scale(0.5)), '#cccccc', 5, 0.5, 0.5);
+                            const overlap = p1.radius + p2.radius - dist, n = distVec.normalize;
+                            p1.pos = p1.pos.add(n.scale(overlap / 2)); p2.pos = p2.pos.sub(n.scale(overlap / 2));
+                            const planet = p1.isOnPlanet;
+                            const v1p = p1.pos.sub(planet.pos); p1.angleOnPlanet = Math.atan2(v1p.y, v1p.x);
+                            p1.pos.x = planet.pos.x+Math.cos(p1.angleOnPlanet)*(planet.radius+p1.radius); p1.pos.y = planet.pos.y+Math.sin(p1.angleOnPlanet)*(planet.radius+p1.radius);
+                            const v2p = p2.pos.sub(planet.pos); p2.angleOnPlanet = Math.atan2(v2p.y, v2p.x);
+                            p2.pos.x = planet.pos.x+Math.cos(p2.angleOnPlanet)*(planet.radius+p2.radius); p2.pos.y = planet.pos.y+Math.sin(p2.angleOnPlanet)*(planet.radius+p2.radius);
+                        }
+                    }
+                }
+            }
+        }
+        
+        function addEliminationMessage(player) {
+            const activePlayerCount = players.filter(p => !p.isEliminated).length;
+            if (activePlayerCount <= 2) return;
+
+            eliminationMessages.push({
+                text: `${player.name} 被淘汰了！`,
+                spawnTime: gameTimer,
+                color: player.color
+            });
+
+            if (eliminationMessages.length > 3) {
+                eliminationMessages.shift();
+            }
+        }
+        
+        function checkGameOver() {
+            const activePlayers = players.filter(p => !p.isEliminated);
+            if (activePlayers.length <= 1) {
+                gameState = 'gameover';
+                screenShakeTimer = 0;
+                screenShakeMagnitude = 0;
+                hud.classList.add('hidden');
+                gameOverScreen.classList.remove('hidden');
+                gameOverScreen.classList.add('flex');
+                
+                roundCounterText.textContent = `第 ${roundNumber} 局`;
+
+                const minutes = Math.floor(gameTimer / 60).toString().padStart(2, '0');
+                const seconds = Math.floor(gameTimer % 60).toString().padStart(2, '0');
+                totalTimeText.textContent = `本局用时: ${minutes}:${seconds}`;
+
+                const rankedPlayers = [...players].sort((a, b) => {
+                    if (a.isEliminated && !b.isEliminated) return 1;
+                    if (!a.isEliminated && b.isEliminated) return -1;
+                    if (a.isEliminated && b.isEliminated) {
+                        return b.eliminationTime - a.eliminationTime;
+                    }
+                    return 0;
+                });
+
+                if (activePlayers.length === 1) {
+                    const winner = rankedPlayers[0];
+                    playSound('gameOverVictory');
+
+                    const scoreUpdates = [2, 1, 0, -1]; // 1st, 2nd, 3rd, 4th
+                    let rankingsHtml = '';
+
+                    rankedPlayers.forEach((p, i) => {
+                        const scoreChange = scoreUpdates[i] !== undefined ? scoreUpdates[i] : 0;
+                        if (playerScores[p.id] !== undefined) {
+                            playerScores[p.id] += scoreChange;
+                        }
+
+                        let scoreChangeHtml = '';
+                        if (scoreChange > 0) {
+                            scoreChangeHtml = `<span class="text-green-400 font-bold">(+${scoreChange})</span>`;
+                        } else if (scoreChange < 0) {
+                            scoreChangeHtml = `<span class="text-red-400 font-bold">(${scoreChange})</span>`;
+                        } else {
+                            scoreChangeHtml = `<span class="text-gray-400">(+0)</span>`;
+                        }
+
+                        rankingsHtml += `
+                            <div class="flex justify-center items-center gap-4">
+                                <span style="color: ${p.color};">${i + 1}. ${p.name}</span>
+                                ${scoreChangeHtml}
+                            </div>
+                        `;
+                    });
+
+                    finalRankings.innerHTML = rankingsHtml;
+
+                    const totalScoreSortedPlayers = [...players].sort((a, b) => {
+                        return playerScores[b.id] - playerScores[a.id];
+                    });
+
+                    let totalScoreHtml = totalScoreSortedPlayers.map((p, i) => `
+                        <div class="flex justify-center items-center gap-4">
+                            <span style="color: ${p.color};">${i + 1}. ${p.name}</span>
+                            <span class="font-bold">${playerScores[p.id]} 分</span>
+                        </div>
+                    `).join('');
+
+                    totalScoreRankings.innerHTML = totalScoreHtml;
+
+                    const winPhrases = [
+                        "舔了舔爪子",
+                        "喵了一声表示不屑一顾",
+                        "撅起了屁股",
+                        "伸了个懒腰",
+                        "表示要称霸GameJam",
+                        "用尾巴画了个圈，宣告胜利",
+                        "把对手当成了毛线球",
+                        "发现了一个新的纸箱并占领了它",
+                        "打了个滚，并把肚皮亮了出来",
+                        "优雅地清理了一下自己的毛",
+                        "对宇宙发出了呼噜呼噜声",
+                        "跳上了最高的星球，俯瞰众生",
+                        "用肉垫踩出了胜利的印记",
+                        '发出了一声响亮的"喵呜"',
+                        "把引力玩弄于股掌之间"
+                    ];
+                    const randomPhrase = winPhrases[Math.floor(Math.random() * winPhrases.length)];
+                    winnerPhraseText.textContent = `${winner.name} ${randomPhrase}`;
+                    winnerPhraseText.style.color = winner.color;
+
+                } else {
+                    winnerPhraseText.textContent = '平局!';
+                    winnerPhraseText.style.color = '#FFFFFF';
+                    finalRankings.innerHTML = '<p>没有分出胜负!</p>';
+                    totalScoreRankings.innerHTML = '';
+                }
+            }
+        }
+
+        function updateScoreDisplay() {
+            const scoreDisplay = document.getElementById('score-display');
+            if (!scoreDisplay) return;
+
+            scoreDisplay.innerHTML = players.map(player => {
+                const score = playerScores[player.id];
+                if (!player || !player.asset) return ''; 
+                
+                return `
+                    <div class="flex items-center gap-3 bg-black bg-opacity-30 px-3 py-1 rounded-lg">
+                        <img src="${player.asset.src}" class="w-8 h-8 rounded-full border-2" style="border-color: ${player.color};">
+                        <span class="text-2xl font-bold text-white" style="text-shadow: 1px 1px 2px rgba(0,0,0,0.7);">${score}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateEliminationFeed() {
+            if (!eliminationFeed) return;
+            eliminationFeed.innerHTML = '';
+            const now = gameTimer;
+            eliminationMessages.forEach(msg => {
+                const age = now - msg.spawnTime;
+                const opacity = (age > 1.5) ? 1 - ((age - 1.5) / 0.5) : 1;
+        
+                const p = document.createElement('p');
+                p.textContent = msg.text;
+                p.style.color = msg.color;
+                p.style.opacity = Math.max(0, opacity);
+                p.style.textShadow = '1px 1px 2px rgba(0,0,0,0.7)';
+                p.style.transition = 'opacity 0.1s linear';
+                eliminationFeed.appendChild(p);
+            });
+        }
+
+        // --- 主更新与绘制循环 ---
+        function update() {
+            if (gameState !== 'playing') return;
+
+            gameTimer += timeStep;
+
+            if (screenShakeTimer > 0) {
+                screenShakeTimer -= timeStep;
+                if (screenShakeTimer <= 0) {
+                    screenShakeMagnitude = 0;
+                }
+            }
+            
+            [...players, ...planets, ...meteors, ...particles, ...powerUps, ...blackHoles, ...shields, ...pendingBlackHoles].forEach(e => e.update());
+            
+            // 标记被淘汰玩家的星球
+            players.forEach(p => {
+                if (p.isEliminated && !p.eliminationProcessed) {
+                    if (p.startingPlanet && planets.includes(p.startingPlanet)) {
+                        p.startingPlanet.isPendingTransformation = true;
+                    }
+                    p.eliminationProcessed = true;
+                }
+            });
+
+            // Update explosion indicators
+            explosionIndicators.forEach(indicator => {
+                indicator.life -= timeStep;
+                // Ease-out function for radius expansion to make it feel more explosive
+                const progress = 1 - (indicator.life / indicator.maxLife);
+                indicator.currentRadius = indicator.maxRadius * (1 - Math.pow(1 - progress, 3)); 
+            });
+            explosionIndicators = explosionIndicators.filter(indicator => indicator.life > 0);
+
+            // Update player start indicators
+            playerStartIndicators.forEach(indicator => {
+                indicator.life -= timeStep;
+            });
+            playerStartIndicators = playerStartIndicators.filter(indicator => indicator.life > 0);
+
+            // 处理即将变成黑洞的星球
+            const planetsToConvert = [];
+            planets.forEach(planet => {
+                if (planet.isPendingTransformation) {
+                    const isPlayerOnPlanet = players.some(p => !p.isEliminated && p.isOnPlanet === planet);
+                    if (isPlayerOnPlanet) {
+                        planet.noPlayerOnSurfaceSince = 0;
+                    } else {
+                        planet.noPlayerOnSurfaceSince += timeStep;
+                    }
+
+                    if (planet.noPlayerOnSurfaceSince >= 1) {
+                        planetsToConvert.push(planet);
+                    }
+                }
+            });
+
+            if (planetsToConvert.length > 0) {
+                planetsToConvert.forEach(planet => {
+                    const newBlackHole = new BlackHole(planet.pos);
+                    newBlackHole.life = Infinity;
+                    newBlackHole.mass = planet.mass * 2;
+                    newBlackHole.gravityRadius = planet.gravityRadius * 1.5;
+                    newBlackHole.maxRadius = planet.radius;
+                    newBlackHole.currentRadius = planet.radius;
+                    blackHoles.push(newBlackHole);
+                    createCollisionParticles(planet.pos, '#ff4d4d', 50, 2, 1.5);
+                });
+                planets = planets.filter(p => !planetsToConvert.includes(p));
+            }
+
+            handlePlanetCollisions();
+
+            particles = particles.filter(p => p.life > 0);
+            meteors = meteors.filter(m => !m.isOffscreen());
+            powerUps = powerUps.filter(p => p.life > 0);
+            blackHoles = blackHoles.filter(b => b.life > 0);
+            shields = shields.filter(s => s.life > 0);
+            pendingBlackHoles = pendingBlackHoles.filter(b => b.life > 0);
+            
+            attackPowerUpSpawnTimer -= timeStep;
+            if (attackPowerUpSpawnTimer <= 0) { spawnAttackPowerUp(); attackPowerUpSpawnTimer = 3 + Math.random() * 2; }
+            
+            functionPowerUpSpawnTimer -= timeStep;
+            if (functionPowerUpSpawnTimer <= 0) { spawnFunctionPowerUp(); functionPowerUpSpawnTimer = 8 + Math.random() * 5; }
+            
+            if (isMeteorShowerImminent) {
+                meteorShowerWarningTime -= timeStep;
+                if (meteorShowerWarningTime <= 0) {
+                    let meteorCount = 50; // 默认为最大值
+                    if (nextShowerIndex < meteorShowerSchedule.length) {
+                        meteorCount = meteorShowerCounts[nextShowerIndex];
+                    }
+                    
+                    spawnMeteorShower(meteorCount);
+                    isMeteorShowerImminent = false;
+                    
+                    if (nextShowerIndex < meteorShowerSchedule.length) {
+                        nextShowerIndex++;
+                    }
+
+                    // 在一波流星雨结束后，如果我们已经超过60秒，则为下一波设置计时器
+                    if (gameTimer >= 60) {
+                        post60sShowerTimer = 10;
+                    }
+                }
+            } else {
+                const warningTime = 2;
+                // 检查60秒前的时间表
+                if (nextShowerIndex < meteorShowerSchedule.length) {
+                    if (gameTimer >= meteorShowerSchedule[nextShowerIndex] - warningTime) {
+                        isMeteorShowerImminent = true;
+                        meteorShowerWarningTime = warningTime;
+                    }
+                } 
+                // 60秒后，使用间隔计时器
+                else {
+                    post60sShowerTimer -= timeStep;
+                    if (post60sShowerTimer <= 0) {
+                        isMeteorShowerImminent = true;
+                        meteorShowerWarningTime = warningTime;
+                    }
+                }
+            }
+            
+            const maxMeteors = 15, timeToMaxMeteors = 60;
+            const desiredMeteorCount = Math.floor((Math.min(gameTimer, timeToMaxMeteors) / timeToMaxMeteors) * maxMeteors);
+            if (meteors.length < desiredMeteorCount && !isMeteorShowerImminent) { spawnMeteor(); }
+            
+            handleCollisions();
+            
+            eliminationMessages = eliminationMessages.filter(msg => gameTimer - msg.spawnTime < 2);
+            updateEliminationFeed();
+
+            if (gameTimer > 0.1) { checkGameOver(); }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw backgrounds with transition
+            if (assets.background1) {
+                ctx.drawImage(assets.background1, 0, 0, canvas.width, canvas.height);
+            }
+            if (gameState === 'playing' && gameTimer > 0 && assets.background2) {
+                const transitionAlpha = Math.min(gameTimer / 60, 1);
+                if (transitionAlpha > 0) {
+                    ctx.save();
+                    ctx.globalAlpha = transitionAlpha;
+                    ctx.drawImage(assets.background2, 0, 0, canvas.width, canvas.height);
+                    ctx.restore();
+                }
+            }
+
+            ctx.save();
+            if (screenShakeTimer > 0) {
+                const dx = (Math.random() - 0.5) * screenShakeMagnitude;
+                const dy = (Math.random() - 0.5) * screenShakeMagnitude;
+                ctx.translate(dx, dy);
+            }
+
+            // Draw explosion indicators
+            explosionIndicators.forEach(indicator => {
+                ctx.save();
+                ctx.beginPath();
+                const opacity = Math.sin(Math.PI * (1 - (indicator.life / indicator.maxLife)));
+                ctx.strokeStyle = `rgba(255, 165, 0, ${opacity * 0.9})`; // Orange
+                ctx.lineWidth = 4;
+                ctx.arc(indicator.pos.x, indicator.pos.y, indicator.currentRadius, 0, 2 * Math.PI);
+                ctx.stroke();
+                ctx.restore();
+            });
+
+            planets.forEach(p => p.draw()); shields.forEach(s => s.draw()); powerUps.forEach(p => p.draw());
+            blackHoles.forEach(b => b.draw()); meteors.forEach(m => m.draw());
+            pendingBlackHoles.forEach(p => p.draw());
+            particles.forEach(p => p.draw());
+
+            // Draw player start indicators
+            playerStartIndicators.forEach(indicator => {
+                const player = indicator.player;
+                if (player.isEliminated) return;
+
+                const progress = Math.max(0, indicator.life / indicator.maxLife); // from 1 to 0
+                const currentRadius = player.radius + (indicator.maxRadius - player.radius) * progress; // Shrinks from maxRadius to player.radius
+                const opacity = progress * progress; // Use squared progress for faster fade out, making it feel brighter for longer.
+
+                ctx.save();
+                ctx.beginPath();
+                const rgb = hexToRgb(indicator.color);
+                if (rgb) {
+                    ctx.shadowColor = indicator.color;
+                    ctx.shadowBlur = 15;
+                    ctx.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`; // Brighter
+                    ctx.lineWidth = 2 + 6 * progress; // Thicker: from 8 to 2
+                    ctx.arc(player.pos.x, player.pos.y, currentRadius, 0, 2 * Math.PI);
+                    ctx.stroke();
+                }
+                ctx.restore();
+            });
+
+            players.forEach(p => p.draw());
+            if (isMeteorShowerImminent) { drawMeteorShowerWarning(); }
+
+            ctx.restore();
+
+            if (gameState === 'playing') {
+                const minutes = Math.floor(gameTimer / 60).toString().padStart(2, '0');
+                const seconds = Math.floor(gameTimer % 60).toString().padStart(2, '0');
+                gameTimerDisplay.textContent = `${minutes}:${seconds}`;
+                updateScoreDisplay();
+            }
+        }
+
+        function drawMeteorShowerWarning() {
+            const flash = Math.abs(Math.sin(gameTimer * 20));
+            ctx.strokeStyle = `rgba(255, 0, 0, ${flash * 0.8})`; ctx.lineWidth = 15;
+            ctx.beginPath(); ctx.moveTo(0, 100); ctx.lineTo(0, 0); ctx.lineTo(100, 0);
+            ctx.moveTo(canvas.width, canvas.height - 100); ctx.lineTo(canvas.width, canvas.height); ctx.lineTo(canvas.width - 100, canvas.height);
+            ctx.stroke(); ctx.lineWidth = 1;
+        }
+
+        function gameLoop(currentTime) {
+            // 将时间转换为秒
+            if (lastTime === 0) { lastTime = currentTime; }
+            let deltaTime = (currentTime - lastTime) / 1000;
+            lastTime = currentTime;
+
+            // 累加经过的时间
+            accumulator += deltaTime;
+
+            // 如果累积的时间超过了固定的步长，就进行一次或多次更新
+            while (accumulator >= timeStep) {
+                if (gameState === 'playing') {
+                    update();
+                }
+                accumulator -= timeStep;
+            }
+            
+            // 每次渲染循环都执行绘制
+            draw();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // --- 事件监听器与初始化 ---
+
+        // 新增一个函数来处理音频解锁和播放
+        function unlockAudioAndPlayStartBGM() {
+            if (audioUnlocked) return;
+            // 只有当音频未解锁、游戏在开始界面且BGM已暂停时，才尝试播放
+            if (bgmStart.paused && gameState === 'start') {
+                bgmStart.play().catch(e => console.warn("菜单BGM播放失败，可能需要再次交互:", e));
+            }
+            audioUnlocked = true;
+            // 任务完成，移除监听器
+            document.body.removeEventListener('click', unlockAudioAndPlayStartBGM);
+            document.body.removeEventListener('keydown', unlockAudioAndPlayStartBGM);
+        }
+
+        window.addEventListener('keydown', (e) => { keys[e.code] = true; });
+        window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+        startButton.addEventListener('click', () => {
+            playSound('buttonClick');
+            if (gameState === 'start') {
+                // 读取并存储玩家输入的名字
+                for (let i = 1; i <= playerCount; i++) {
+                    const nameDisplay = document.getElementById(`player-name-display-${i}`);
+                    const playerData = allPlayersData.find(p => p.id === i);
+                    if (nameDisplay && nameDisplay.textContent.trim() !== '' && playerData) {
+                        playerData.name = nameDisplay.textContent.trim().slice(0, 8); // 限制名字长度
+                    }
+                }
+
+                bgmStart.pause();
+                bgmStart.currentTime = 0;
+                bgmGame.play().catch(e => console.warn("游戏BGM播放失败:", e));
+                
+                gameState = 'loading';
+                startButton.disabled = true;
+                startButton.classList.add('hidden'); controlsInfo.classList.add('hidden');
+                instructionsText.classList.add('hidden'); loadingText.classList.remove('hidden');
+                
+                loadAssets().then(() => {
+                    startScreen.classList.add('hidden');
+                    hud.classList.remove('hidden');
+                    init();
+                });
+            }
+        });
+
+        restartButton.addEventListener('click', () => {
+            playSound('buttonClick');
+            
+            roundNumber++;
+
+            // 停止并重置游戏音乐，然后重新播放
+            bgmGame.pause();
+            bgmGame.currentTime = 0;
+            bgmGame.play().catch(e => console.warn("游戏BGM播放失败:", e));
+
+            // 隐藏结束画面，清空文字
+            gameOverScreen.classList.add('hidden');
+            winnerPhraseText.textContent = '';
+            finalRankings.innerHTML = '';
+            totalScoreRankings.innerHTML = '';
+            
+            eliminationMessages = []; // 清空淘汰信息
+
+            // 显示游戏HUD并初始化下一局
+            hud.classList.remove('hidden');
+            init(); // init会将gameState设置为'playing'
+        });
+
+        resetButton.addEventListener('click', () => {
+            playSound('buttonClick');
+            location.reload(); // 刷新页面
+        });
+
+        window.addEventListener('resize', () => {
+            const container = document.getElementById('game-container');
+            canvas.width = container.clientWidth; canvas.height = container.clientHeight;
+            // Also resize instructions canvas if it's visible
+            if (!instructionsModal.classList.contains('hidden')) {
+                setupInstructionsCanvas();
+            }
+            if (gameState === 'playing') { init(); }
+        });
+
+        window.onload = () => {
+            // 为菜单和说明页预加载少量关键资源
+            const menuAssets = {
+                background1: assetsToLoad.background1,
+            };
+            // 把所有道具图片也加入预加载
+            powerUpInfo.forEach(p => {
+                if (assetsToLoad[p.assetName]) {
+                    menuAssets[p.assetName] = assetsToLoad[p.assetName];
+                }
+            });
+            
+            loadAssets(menuAssets).then(() => {
+                // 背景图加载后，主循环会在canvas上绘制它
+                // 现在可以安全地设置演示画布了
+            });
+
+
+            // 监听用户的首次交互来解锁并播放音频
+            document.body.addEventListener('click', unlockAudioAndPlayStartBGM);
+            document.body.addEventListener('keydown', unlockAudioAndPlayStartBGM);
+
+            updateControlsInfo(playerCount);
+
+            Object.entries(playerCountButtons).forEach(([count, button]) => {
+                button.addEventListener('click', () => {
+                    playSound('buttonClick');
+                    playerCount = parseInt(count, 10);
+                    
+                    Object.values(playerCountButtons).forEach(btn => {
+                        btn.classList.remove('bg-purple-600');
+                        btn.classList.add('bg-gray-600', 'hover:bg-gray-700');
+                    });
+                    button.classList.add('bg-purple-600');
+                    button.classList.remove('bg-gray-600', 'hover:bg-gray-700');
+                    
+                    updateControlsInfo(playerCount);
+                });
+            });
+            
+            // 启动游戏循环
+            requestAnimationFrame(gameLoop);
+        };
+
+        const allControlsData = [
+            { id: 1, name: '莱德', color: '#FF6347', keys: ['A', 'W', 'D'], note: '左 / 跳 / 右' },
+            { id: 2, name: '布鲁', color: '#4169E1', keys: ['J', 'I', 'L'], note: '左 / 跳 / 右' },
+            { id: 3, name: '格林', color: '#32CD32', keys: ['←', '↑', '→'], note: '方向键 左/跳/右' },
+            { id: 4, name: '胖橘', color: '#FFD700', keys: ['4', '8', '6'], note: '小键盘 左/跳/右' }
+        ];
+
+        function updateControlsInfo(count) {
+            const controlsData = allControlsData.slice(0, count);
+            controlsInfo.innerHTML = controlsData.map(p => `
+                <div class="control-card rounded-lg p-4 text-white">
+                    <h3 id="player-name-display-${p.id}" contenteditable="true" class="player-name-editable text-xl font-bold mb-2 text-center" style="color: ${p.color};">${p.name}</h3>
+                    <div class="flex justify-center gap-2">
+                        <div class="key" style="background-color: ${p.color}; color: white;">${p.keys[0]}</div>
+                        <div class="key" style="background-color: ${p.color}; color: white;">${p.keys[1]}</div>
+                        <div class="key" style="background-color: ${p.color}; color: white;">${p.keys[2]}</div>
+                    </div>
+                    <p class="mt-2 text-sm text-center">${p.note}</p>
+                </div>`
+            ).join('');
+            controlsInfo.className = `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${count} gap-4 mb-8`;
+        }
+
+        // --- 调试菜单逻辑 ---
+        function setupDebugMenu() {
+            debugToggleBtn.addEventListener('click', () => {
+                debugMenu.classList.toggle('hidden');
+            });
+
+            debugKillAiBtn.addEventListener('click', () => {
+                if (gameState !== 'playing') return;
+                players.forEach(p => {
+                    if (p.isAI && !p.isEliminated) {
+                        addEliminationMessage(p);
+                        p.isEliminated = true;
+                        p.eliminationTime = gameTimer;
+                    }
+                });
+            });
+
+            debugKillPlayersBtn.addEventListener('click', () => {
+                if (gameState !== 'playing') return;
+                players.forEach(p => {
+                    if (!p.isAI && !p.isEliminated) {
+                        addEliminationMessage(p);
+                        p.isEliminated = true;
+                        p.eliminationTime = gameTimer;
+                    }
+                });
+            });
+
+            debugMeteorShowerBtn.addEventListener('click', () => {
+                if (gameState !== 'playing') return;
+                spawnMeteorShower(50);
+            });
+
+            // 清空以防重复添加
+            debugSpawnPowerupsContainer.innerHTML = '<h5 class="text-md font-bold mt-2 border-t border-gray-600 pt-2">生成道具</h5>';
+            powerUpInfo.forEach(info => {
+                const btn = document.createElement('button');
+                btn.textContent = info.name;
+                btn.classList.add('debug-btn');
+                btn.addEventListener('click', () => {
+                    if (gameState !== 'playing' || planets.length === 0) return;
+                    const planet = planets[Math.floor(Math.random() * planets.length)];
+                    const angle = Math.random() * 2 * Math.PI;
+                    powerUps.push(new PowerUp(planet, angle, info.type));
+                });
+                debugSpawnPowerupsContainer.appendChild(btn);
+            });
+        }
+        setupDebugMenu();
+
+        // --- 说明页面逻辑 ---
+        let demoPlanet, demoCat, instructionsCtx;
+
+        function setupInstructionsCanvas() {
+            if (!instructionsCanvas.getContext) return;
+            instructionsCanvas.width = instructionsCanvas.clientWidth;
+            instructionsCanvas.height = instructionsCanvas.clientHeight;
+            instructionsCtx = instructionsCanvas.getContext('2d');
+            
+            const w = instructionsCanvas.width;
+            const h = instructionsCanvas.height;
+
+            demoPlanet = {
+                pos: new Vec2(w / 2, h / 2),
+                radius: Math.min(w, h) * 0.35,
+                rotation: 0,
+                rotationSpeed: 0.005,
+                asset: assets.planet2 || assets.cat2, // Fallback asset
+                draw: function() {
+                    if (!instructionsCtx) return;
+                    instructionsCtx.save();
+                    instructionsCtx.translate(this.pos.x, this.pos.y);
+                    instructionsCtx.rotate(this.rotation);
+                    if (this.asset) {
+                        instructionsCtx.drawImage(this.asset, -this.radius, -this.radius, this.radius * 2, this.radius * 2);
+                    } else {
+                        instructionsCtx.fillStyle = '#4169E1';
+                        instructionsCtx.beginPath();
+                        instructionsCtx.arc(0, 0, this.radius, 0, 2 * Math.PI);
+                        instructionsCtx.fill();
+                    }
+                    instructionsCtx.restore();
+                }
+            };
+
+            demoCat = {
+                planet: demoPlanet,
+                angle: -Math.PI / 2,
+                radius: 15,
+                asset: assets.cat1,
+                isJumping: false,
+                jumpProgress: 0,
+                jumpTimer: Math.random() * 2, // Start with a random delay
+                jumpCooldown: 3, // Jumps every 3 seconds
+                draw: function() {
+                    if (!instructionsCtx) return;
+                    
+                    const jumpHeight = 40;
+                    const currentJumpHeight = jumpHeight * Math.sin(Math.PI * this.jumpProgress);
+                    
+                    const catPosOnPlanet = new Vec2(
+                        this.planet.pos.x + Math.cos(this.angle) * (this.planet.radius + this.radius),
+                        this.planet.pos.y + Math.sin(this.angle) * (this.planet.radius + this.radius)
+                    );
+                    
+                    const upDirection = catPosOnPlanet.sub(this.planet.pos).normalize;
+                    const finalPos = catPosOnPlanet.add(upDirection.scale(currentJumpHeight));
+
+                    instructionsCtx.save();
+                    instructionsCtx.translate(finalPos.x, finalPos.y);
+                    instructionsCtx.rotate(this.angle + Math.PI / 2);
+                    if (this.asset) {
+                        instructionsCtx.drawImage(this.asset, -this.radius * 1.25, -this.radius * 1.25, this.radius * 2.5, this.radius * 2.5);
+                    } else {
+                        instructionsCtx.fillStyle = '#FF6347';
+                        instructionsCtx.beginPath();
+                        instructionsCtx.arc(0, 0, this.radius, 0, 2 * Math.PI);
+                        instructionsCtx.fill();
+                    }
+                    instructionsCtx.restore();
+                }
+            };
+        }
+
+        function instructionsAnimationLoop() {
+            const timeStep = 1/60;
+            if (demoPlanet && demoCat && instructionsCtx) {
+                // Update
+                demoPlanet.rotation += demoPlanet.rotationSpeed;
+                
+                if (demoCat.isJumping) {
+                    demoCat.jumpProgress += timeStep * 1.5; // Jump animation speed
+                    if (demoCat.jumpProgress >= 1) {
+                        demoCat.isJumping = false;
+                        demoCat.jumpProgress = 0;
+                    }
+                } else {
+                    demoCat.angle += 0.01; // Cat walks on planet
+                    demoCat.jumpTimer += timeStep;
+                    if (demoCat.jumpTimer >= demoCat.jumpCooldown) {
+                        demoCat.isJumping = true;
+                        demoCat.jumpTimer = 0;
+                    }
+                }
+
+                // Draw
+                instructionsCtx.clearRect(0, 0, instructionsCanvas.width, instructionsCanvas.height);
+                demoPlanet.draw();
+                demoCat.draw();
+            }
+            instructionsAnimationId = requestAnimationFrame(instructionsAnimationLoop);
+        }
+
+        function startInstructionsAnimation() {
+            if (!instructionsCtx) {
+                setupInstructionsCanvas();
+            }
+            if (instructionsAnimationId) {
+                cancelAnimationFrame(instructionsAnimationId);
+            }
+            instructionsAnimationLoop();
+        }
+
+        function stopInstructionsAnimation() {
+            if (instructionsAnimationId) {
+                cancelAnimationFrame(instructionsAnimationId);
+                instructionsAnimationId = null;
+            }
+        }
+
+        function populatePowerUpsList() {
+            const attackList = document.getElementById('attack-power-ups-list');
+            const functionalList = document.getElementById('functional-power-ups-list');
+            if (!attackList || !functionalList) return;
+
+            const renderList = (items) => {
+                return items.map(item => {
+                    const asset = assets[item.assetName];
+                    const imgSrc = asset ? asset.src : '';
+                    return `
+                        <div class="flex items-center gap-4 p-2 control-card rounded-md">
+                            <img src="${imgSrc}" class="w-12 h-12 flex-shrink-0">
+                            <div>
+                                <p class="font-bold text-lg text-yellow-200">${item.name}</p>
+                                <p class="text-sm text-gray-200">${item.description}</p>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            };
+
+            const attackItems = powerUpInfo.filter(p => p.category === 'attack');
+            const functionalItems = powerUpInfo.filter(p => p.category === 'functional');
+
+            attackList.innerHTML = renderList(attackItems);
+            functionalList.innerHTML = renderList(functionalItems);
+        }
+        
+        // --- 事件监听器与初始化 ---
+
+        // 新增一个函数来处理音频解锁和播放
+        function unlockAudioAndPlayStartBGM() {
+            if (audioUnlocked) return;
+            // 只有当音频未解锁、游戏在开始界面且BGM已暂停时，才尝试播放
+            if (bgmStart.paused && gameState === 'start') {
+                bgmStart.play().catch(e => console.warn("菜单BGM播放失败，可能需要再次交互:", e));
+            }
+            audioUnlocked = true;
+            // 任务完成，移除监听器
+            document.body.removeEventListener('click', unlockAudioAndPlayStartBGM);
+            document.body.removeEventListener('keydown', unlockAudioAndPlayStartBGM);
+        }
+
+        instructionsButton.addEventListener('click', () => {
+            playSound('buttonClick');
+            populatePowerUpsList();
+            instructionsModal.classList.remove('hidden');
+            instructionsModal.classList.add('flex');
+            startInstructionsAnimation();
+        });
+
+        closeInstructionsButton.addEventListener('click', () => {
+            playSound('buttonClick');
+            instructionsModal.classList.add('hidden');
+            instructionsModal.classList.remove('flex');
+            stopInstructionsAnimation();
+        });
+
+        creditsButton.addEventListener('click', () => {
+            playSound('buttonClick');
+            creditsModal.classList.remove('hidden');
+            creditsModal.classList.add('flex');
+        });
+
+        closeCreditsButton.addEventListener('click', () => {
+            playSound('buttonClick');
+            creditsModal.classList.add('hidden');
+            creditsModal.classList.remove('flex');
+        });
+    </script>
+</body>
+</html>
+
