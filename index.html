@@ -641,6 +641,68 @@
                     return;
                 }
 
+                // --- Threat Assessment & Evasion ---
+                const DANGER_RADIUS = this.isOnPlanet ? 250 : 150; // On planet, AI has more time to react
+                const PANIC_JUMP_RADIUS = this.isOnPlanet ? 120 : 80;
+                let closestThreat = null;
+                let minThreatDist = Infinity;
+
+                for (const meteor of meteors) {
+                    const distVec = this.pos.sub(meteor.pos);
+                    const dist = distVec.magnitude;
+
+                    if (dist < minThreatDist) {
+                        // Project meteor's path slightly to see if it's getting closer
+                        const futureMeteorPos = meteor.pos.add(meteor.vel.scale(15)); // Project 1/4 second
+                        if (this.pos.sub(futureMeteorPos).magnitude < dist) {
+                            closestThreat = meteor;
+                            minThreatDist = dist;
+                        }
+                    }
+                }
+
+                if (closestThreat && minThreatDist < DANGER_RADIUS) {
+                    // There is a threat! Take evasive action.
+                    this.aiState = 'evading'; // Enter an evasive state
+                    if (this.isOnPlanet) {
+                        // If threat is very close, panic jump
+                        if (minThreatDist < PANIC_JUMP_RADIUS) {
+                            if (!this.isCharging) { // Avoid starting a new jump if already charging
+                                this.isCharging = true;
+                                this.jumpCharge = Math.random() * 40 + 20; // Short to medium jump
+                                this.jump();
+                                this.aiStateTimer = 0.5 + Math.random() * 0.5; // Cooldown after jump
+                                return; // Evasive action taken for this frame
+                            }
+                        } else {
+                            // Threat is further away, try to move on the planet surface
+                            const planet = this.isOnPlanet;
+                            const playerUp = this.pos.sub(planet.pos).normalize;
+                            const playerRight = new Vec2(-playerUp.y, playerUp.x); // Tangent vector for "right" movement
+
+                            const threatRelPos = closestThreat.pos.sub(this.pos);
+                            // Project relative position onto the player's "right" vector
+                            const sideComponent = threatRelPos.x * playerRight.x + threatRelPos.y * playerRight.y;
+
+                            // If sideComponent > 0, meteor is on the right, so move left.
+                            // If sideComponent < 0, meteor is on the left, so move right.
+                            this.moveDir = sideComponent > 0 ? -1 : 1;
+                            this.aiStateTimer = 0.3 + Math.random() * 0.2; // Set a timer to continue evading for a bit
+                        }
+                    } else {
+                        // AI is in space, limited control. Try to thrust away.
+                        const thrustDir = this.pos.sub(closestThreat.pos).normalize;
+                        if (Math.abs(thrustDir.x) > Math.abs(thrustDir.y)) {
+                            this.moveDir = thrustDir.x > 0 ? 1 : -1; // Use horizontal air control
+                        } else {
+                             this.moveDir = 0; // Vertical threats are harder to dodge with horizontal controls.
+                        }
+                         this.aiStateTimer = 0.3 + Math.random() * 0.2;
+                    }
+                }
+                // --- END of Evasion Logic ---
+
+
                 this.aiStateTimer -= timeStep;
 
                 if (this.aiStateTimer <= 0) {
