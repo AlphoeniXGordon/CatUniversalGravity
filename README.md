@@ -1,3 +1,5 @@
+<h1 style="color:red;">点击右上角空白处有Debug菜单！点击右上角空白处有Debug菜单！</h1>
+
 # 猫的万有引力 (Cat's Universal Gravity)
 
 ![Game Screenshot](./images/backgroundd.png)
